@@ -30,6 +30,7 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [editReview, setEditReview] = useState(null);
   const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
 
   const filteredStudents = students.filter(s =>
@@ -81,9 +82,63 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
 
     // Send notification
     const studentData = users.find(u => u.id === selectedStudent);
-    await notifyReviewAssigned(studentData, review, true);
+    const result = await notifyReviewAssigned(studentData, review, true);
+
+    // Update review with WhatsApp status
+    if (result?.whatsappResult) {
+      review.whatsapp_status = result.whatsappResult.success ? 'delivered' : 'failed';
+    }
 
     setShowReviewForm(false);
+  };
+
+  const updateReview = (reviewData) => {
+    updateUser(selectedStudent, u => ({
+      ...u,
+      reviews: (u.reviews || []).map(r =>
+        r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r
+      ),
+    }));
+    setEditReview(null);
+    setShowReviewForm(false);
+  };
+
+  const deleteReview = (reviewId) => {
+    updateUser(selectedStudent, u => ({
+      ...u,
+      reviews: (u.reviews || []).filter(r => r.id !== reviewId),
+    }));
+  };
+
+  const handleEditReview = (review) => {
+    setEditReview(review);
+    setShowReviewForm(true);
+  };
+
+  const handleSaveReview = (reviewData) => {
+    if (editReview) {
+      updateReview(reviewData);
+    } else {
+      createReview(reviewData);
+    }
+  };
+
+  const retryWhatsAppForReview = async (reviewId) => {
+    const review = student.reviews?.find(r => r.id === reviewId);
+    if (!review) return;
+
+    const studentData = users.find(u => u.id === selectedStudent);
+    const result = await notifyReviewAssigned(studentData, review, true);
+
+    // Update review with new WhatsApp status
+    if (result?.whatsappResult) {
+      updateUser(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).map(r =>
+          r.id === reviewId ? { ...r, whatsapp_status: result.whatsappResult.success ? 'delivered' : 'failed' } : r
+        ),
+      }));
+    }
   };
 
   const getNextReviewNumber = () => {
@@ -449,15 +504,25 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
                   </button>
                 </div>
 
-                <ReviewList reviews={student.reviews || []} isTeacher={true} />
+                <ReviewList
+                  reviews={student.reviews || []}
+                  isTeacher={true}
+                  onEdit={handleEditReview}
+                  onDelete={deleteReview}
+                  onRetryWhatsApp={retryWhatsAppForReview}
+                />
 
                 {showReviewForm && (
                   <ReviewForm
                     studentId={student.id}
                     studentName={student.fullName}
                     nextReviewNumber={getNextReviewNumber()}
-                    onSave={createReview}
-                    onCancel={() => setShowReviewForm(false)}
+                    initialReview={editReview}
+                    onSave={handleSaveReview}
+                    onCancel={() => {
+                      setShowReviewForm(false);
+                      setEditReview(null);
+                    }}
                   />
                 )}
               </>
