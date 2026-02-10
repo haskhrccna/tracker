@@ -11,6 +11,9 @@ import SettingsPanel from '../components/SettingsPanel';
 import Heatmap from '../components/Heatmap';
 import { GradeDistributionChart, ScoreProgressChart } from '../components/ScoreChart';
 import SuraList from '../components/SuraList';
+import ReviewForm from '../components/ReviewForm';
+import ReviewList from '../components/ReviewList';
+import { notifyReviewAssigned } from '../utils/notificationService';
 
 export default function TeacherDashboard({ user, users, updateUser, logout }) {
   const { dark } = useTheme();
@@ -26,6 +29,8 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
 
   const filteredStudents = students.filter(s =>
     s.fullName.includes(searchQuery) || s.username.includes(searchQuery)
@@ -48,6 +53,43 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
 
   const deleteRecord = (recordId) => {
     updateUser(selectedStudent, u => ({ ...u, records: u.records.filter(r => r.id !== recordId) }));
+  };
+
+  // Review management
+  const createReview = async (reviewData) => {
+    const review = {
+      id: uid(),
+      ...reviewData,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    };
+
+    // Add surahs to review
+    review.surahs = reviewData.surahs.map(surah => ({
+      surah,
+      completed: false,
+      score: null,
+      errors: 0,
+      reviewed_at: null,
+    }));
+
+    // Update student with new review
+    updateUser(selectedStudent, u => ({
+      ...u,
+      reviews: [...(u.reviews || []), review],
+    }));
+
+    // Send notification
+    const studentData = users.find(u => u.id === selectedStudent);
+    await notifyReviewAssigned(studentData, review, true);
+
+    setShowReviewForm(false);
+  };
+
+  const getNextReviewNumber = () => {
+    const studentReviews = student?.reviews || [];
+    if (studentReviews.length === 0) return 1;
+    return Math.max(...studentReviews.map(r => r.review_number)) + 1;
   };
 
   const overallScore = student?.records?.length
@@ -186,8 +228,54 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
               </div>
             </div>
 
-            {/* Heatmap */}
-            <Heatmap activityMap={studentActivity} />
+            {/* Tab Navigation */}
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              marginBottom: 24,
+              borderBottom: `2px solid ${dark ? '#1e293b' : '#e2e8f0'}`,
+            }}>
+              <button
+                onClick={() => setActiveTab('progress')}
+                style={{
+                  padding: '12px 24px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: activeTab === 'progress' ? `3px solid #3b82f6` : '3px solid transparent',
+                  color: activeTab === 'progress' ? (dark ? '#f1f5f9' : '#1e293b') : (dark ? '#64748b' : '#94a3b8'),
+                  fontWeight: activeTab === 'progress' ? 700 : 400,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginBottom: -2,
+                }}
+              >
+                📊 {isRTL ? 'التقدم والأداء' : i18n.language === 'fr' ? 'Progrès' : 'Progress & Performance'}
+              </button>
+              <button
+                onClick={() => setActiveTab('reviews')}
+                style={{
+                  padding: '12px 24px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: activeTab === 'reviews' ? `3px solid #3b82f6` : '3px solid transparent',
+                  color: activeTab === 'reviews' ? (dark ? '#f1f5f9' : '#1e293b') : (dark ? '#64748b' : '#94a3b8'),
+                  fontWeight: activeTab === 'reviews' ? 700 : 400,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginBottom: -2,
+                }}
+              >
+                📝 {isRTL ? 'المراجعات' : i18n.language === 'fr' ? 'Révisions' : 'Reviews'}
+                {student.reviews?.length > 0 && ` (${student.reviews.length})`}
+              </button>
+            </div>
+
+            {activeTab === 'progress' && (
+              <>
+                {/* Heatmap */}
+                <Heatmap activityMap={studentActivity} />
 
             {/* Charts */}
             <GradeDistributionChart records={student.records} />
@@ -336,12 +424,50 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
                 })}
               </div>
             )}
+              </>
+            )}
+
+            {activeTab === 'reviews' && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={s.sectionTitle}>
+                    {isRTL ? 'المراجعات المحددة' : i18n.language === 'fr' ? 'Révisions assignées' : 'Assigned Reviews'}
+                  </h3>
+                  <button
+                    onClick={() => setShowReviewForm(true)}
+                    style={{
+                      ...s.primaryBtn,
+                      background: dark ? '#1e40af' : '#3b82f6',
+                      padding: '10px 20px',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    ➕ {isRTL ? 'إنشاء مراجعة جديدة' : i18n.language === 'fr' ? 'Nouvelle révision' : 'Create New Review'}
+                  </button>
+                </div>
+
+                <ReviewList reviews={student.reviews || []} isTeacher={true} />
+
+                {showReviewForm && (
+                  <ReviewForm
+                    studentId={student.id}
+                    studentName={student.fullName}
+                    nextReviewNumber={getNextReviewNumber()}
+                    onSave={createReview}
+                    onCancel={() => setShowReviewForm(false)}
+                  />
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
 
       {mobileMenuOpen && <div onClick={() => setMobileMenuOpen(false)} style={s.overlay}></div>}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel userId={user.id} onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

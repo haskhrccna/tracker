@@ -16,6 +16,7 @@ create table if not exists profiles (
   dark_mode boolean default false,
   notification_enabled boolean default false,
   notification_time text default '06:00',
+  whatsapp_number text,
   created_at timestamptz default now()
 );
 
@@ -141,3 +142,97 @@ $$ language plpgsql security definer;
 create or replace trigger on_activity_insert
   after insert on daily_activity
   for each row execute function update_streak();
+
+-- ─── Reviews (مراجعة) ──────────────────────────────────────
+create table if not exists reviews (
+  id uuid primary key default gen_random_uuid(),
+  teacher_id uuid not null references profiles(id) on delete cascade,
+  student_id uuid not null references profiles(id) on delete cascade,
+  review_number integer not null,
+  review_date date not null,
+  status text not null default 'pending' check (status in ('pending', 'completed', 'missed')),
+  notes text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(student_id, review_number)
+);
+
+alter table reviews enable row level security;
+
+create policy "Teachers can manage all reviews"
+  on reviews for all using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'teacher')
+  );
+
+create policy "Students can view own reviews"
+  on reviews for select using (student_id = auth.uid());
+
+-- ─── Review Surahs (junction table) ────────────────────────
+create table if not exists review_surahs (
+  id uuid primary key default gen_random_uuid(),
+  review_id uuid not null references reviews(id) on delete cascade,
+  surah text not null,
+  completed boolean default false,
+  score integer check (score >= 0 and score <= 100),
+  errors integer default 0,
+  reviewed_at timestamptz,
+  created_at timestamptz default now()
+);
+
+alter table review_surahs enable row level security;
+
+create policy "Teachers can manage review surahs"
+  on review_surahs for all using (
+    exists (
+      select 1 from reviews r
+      inner join profiles p on p.id = auth.uid()
+      where r.id = review_surahs.review_id and p.role = 'teacher'
+    )
+  );
+
+create policy "Students can view own review surahs"
+  on review_surahs for select using (
+    exists (
+      select 1 from reviews r
+      where r.id = review_surahs.review_id and r.student_id = auth.uid()
+    )
+  );
+
+-- ─── Notifications ──────────────────────────────────────────
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  type text not null check (type in ('review_assigned', 'review_reminder', 'review_due', 'achievement')),
+  title text not null,
+  message text not null,
+  related_id uuid,
+  read boolean default false,
+  sent_whatsapp boolean default false,
+  whatsapp_status text,
+  created_at timestamptz default now()
+);
+
+alter table notifications enable row level security;
+
+create policy "Users can view own notifications"
+  on notifications for select using (user_id = auth.uid());
+
+create policy "Users can update own notifications"
+  on notifications for update using (user_id = auth.uid());
+
+create policy "Teachers can create notifications"
+  on notifications for insert with check (
+    exists (select 1 from profiles where id = auth.uid() and role = 'teacher')
+  );
+
+-- ─── Additional Indexes ─────────────────────────────────────
+create index if not exists idx_reviews_student on reviews(student_id);
+create index if not exists idx_reviews_teacher on reviews(teacher_id);
+create index if not exists idx_reviews_date on reviews(review_date);
+create index if not exists idx_review_surahs_review on review_surahs(review_id);
+create index if not exists idx_notifications_user on notifications(user_id, read);
+
+-- ─── Realtime for new tables ───────────────────────────────
+alter publication supabase_realtime add table reviews;
+alter publication supabase_realtime add table review_surahs;
+alter publication supabase_realtime add table notifications;
