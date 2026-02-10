@@ -9,6 +9,7 @@ import { getStyles } from '../utils/styles';
 import SettingsPanel from '../components/SettingsPanel';
 import Heatmap from '../components/Heatmap';
 import { GradeDistributionChart, ScoreProgressChart } from '../components/ScoreChart';
+import SuraList from '../components/SuraList';
 
 export default function StudentDashboard({ user, logout }) {
   const { dark } = useTheme();
@@ -108,6 +109,11 @@ export default function StudentDashboard({ user, logout }) {
         </div>
       )}
 
+      {/* Surah List */}
+      <div style={{ marginTop: 40, marginBottom: 40 }}>
+        <SuraList records={user.records} />
+      </div>
+
       {/* Export toolbar */}
       <div style={{ maxWidth: 800, margin: '0 auto 16px', padding: '0 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
@@ -159,12 +165,68 @@ export default function StudentDashboard({ user, logout }) {
                     </div>
                     <div style={s.recordDetail}>
                       <span style={s.recordDetailLabel}>{t('record.errors')}</span>
-                      <span style={s.recordDetailValue}>{rec.errors}</span>
+                      <span style={{ ...s.recordDetailValue, color: rec.errors > 0 ? '#ef4444' : '#10b981' }}>
+                        {rec.errors === 0 ? '✓ ' : ''}{rec.errors}
+                      </span>
                     </div>
                     {rec.errorVerses && (
+                      <div style={{
+                        background: dark ? '#1e293b' : '#fef2f2',
+                        border: `2px solid ${dark ? '#7f1d1d' : '#fca5a5'}`,
+                        borderRadius: 8,
+                        padding: 10,
+                        marginTop: 8,
+                      }}>
+                        <div style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: dark ? '#fca5a5' : '#dc2626',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: 6,
+                        }}>
+                          ⚠️ {t('record.errorVersesLabel')}
+                        </div>
+                        <div style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: dark ? '#f1f5f9' : '#1e293b',
+                          wordBreak: 'break-word',
+                        }}>
+                          {rec.errorVerses}
+                        </div>
+                      </div>
+                    )}
+                    {rec.review_start_date && (
                       <div style={s.recordDetail}>
-                        <span style={s.recordDetailLabel}>{t('record.errorVersesLabel')}</span>
-                        <span style={s.recordDetailValue}>{rec.errorVerses}</span>
+                        <span style={s.recordDetailLabel}>
+                          {isRTL ? 'بدء المراجعة' : i18n.language === 'fr' ? 'Début' : 'Started'}
+                        </span>
+                        <span style={s.recordDetailValue}>
+                          {new Date(rec.review_start_date).toLocaleDateString(
+                            i18n.language === 'ar' ? "ar-SA" : i18n.language === 'fr' ? "fr-FR" : "en-US",
+                            { month: "short", day: "numeric" }
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {rec.completed && (
+                      <div style={{
+                        background: dark ? '#1e293b' : '#f0fdf4',
+                        border: `2px solid ${dark ? '#065f46' : '#86efac'}`,
+                        borderRadius: 8,
+                        padding: 8,
+                        marginTop: 8,
+                        textAlign: 'center',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: dark ? '#6ee7b7' : '#10b981',
+                      }}>
+                        ✅ {isRTL ? 'مكتمل' : i18n.language === 'fr' ? 'Complété' : 'Completed'}
+                        {rec.completion_date && ` • ${new Date(rec.completion_date).toLocaleDateString(
+                          i18n.language === 'ar' ? "ar-SA" : i18n.language === 'fr' ? "fr-FR" : "en-US",
+                          { month: "short", day: "numeric" }
+                        )}`}
                       </div>
                     )}
                     {rec.notes && <div style={s.recordNotes}>{rec.notes}</div>}
