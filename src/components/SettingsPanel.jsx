@@ -1,15 +1,30 @@
+import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useNotifications } from '../hooks/useNotifications';
 import { LANG_KEY } from '../utils/constants';
 import { getStyles } from '../utils/styles';
 
-export default function SettingsPanel({ onClose }) {
+export default function SettingsPanel({ onClose, userId }) {
   const { dark, toggle } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
   const { enabled, reminderTime, enableNotifications, disableNotifications, setReminderTime } = useNotifications();
+
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+
+  useEffect(() => {
+    // Load WhatsApp number from localStorage
+    const saved = localStorage.getItem(`quran-tracker-whatsapp-${userId}`);
+    if (saved) setWhatsappNumber(saved);
+  }, [userId]);
+
+  const handleWhatsAppChange = (e) => {
+    const number = e.target.value;
+    setWhatsappNumber(number);
+    localStorage.setItem(`quran-tracker-whatsapp-${userId}`, number);
+  };
 
   const changeLanguage = (lang) => {
     i18n.changeLanguage(lang);
@@ -65,6 +80,25 @@ export default function SettingsPanel({ onClose }) {
               <option value="en">English</option>
               <option value="fr">Français</option>
             </select>
+          </div>
+
+          {/* WhatsApp Number */}
+          <div style={s.settingsRow}>
+            <span style={s.settingsLabel}>
+              {isRTL ? 'رقم الواتساب' : i18n.language === 'fr' ? 'N° WhatsApp' : 'WhatsApp Number'}
+            </span>
+            <input
+              type="tel"
+              value={whatsappNumber}
+              onChange={handleWhatsAppChange}
+              placeholder={isRTL ? '+966xxxxxxxxx' : '+966xxxxxxxxx'}
+              style={{
+                ...s.langSelect,
+                padding: '6px 10px',
+                textAlign: isRTL ? 'right' : 'left',
+                fontFamily: 'monospace',
+              }}
+            />
           </div>
 
           {/* Notifications */}

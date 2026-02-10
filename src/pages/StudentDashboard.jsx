@@ -10,6 +10,9 @@ import SettingsPanel from '../components/SettingsPanel';
 import Heatmap from '../components/Heatmap';
 import { GradeDistributionChart, ScoreProgressChart } from '../components/ScoreChart';
 import SuraList from '../components/SuraList';
+import ReviewList from '../components/ReviewList';
+import NotificationPanel from '../components/NotificationPanel';
+import { getUnreadCount } from '../utils/notificationService';
 
 export default function StudentDashboard({ user, logout }) {
   const { dark } = useTheme();
@@ -18,6 +21,14 @@ export default function StudentDashboard({ user, logout }) {
   const s = getStyles(dark, isRTL);
   const { playing, loading, playSurah } = useAudio();
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
+
+  // Load unread notifications count
+  useState(() => {
+    setUnreadCount(getUnreadCount(user.id));
+  }, [user.id]);
 
   const overallScore = user.records.length
     ? Math.round(user.records.reduce((s, r) => s + r.score, 0) / user.records.length)
@@ -41,6 +52,37 @@ export default function StudentDashboard({ user, logout }) {
           {streak > 0 && (
             <div style={s.streakBadge}>🔥 {streak} {t('common.streak')}</div>
           )}
+          <button
+            onClick={() => {
+              setShowNotifications(true);
+              setUnreadCount(0);
+            }}
+            style={{
+              ...s.logoutBtnSmall,
+              position: 'relative',
+            }}
+          >
+            🔔
+            {unreadCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                background: '#ef4444',
+                color: '#fff',
+                borderRadius: '50%',
+                width: 18,
+                height: 18,
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {unreadCount}
+              </span>
+            )}
+          </button>
           <button onClick={() => setShowSettings(true)} style={s.logoutBtnSmall}>⚙️</button>
           <button onClick={logout} style={s.logoutBtnSmall}>🚪 {t('common.logoutShort')}</button>
         </div>
@@ -75,10 +117,61 @@ export default function StudentDashboard({ user, logout }) {
         </div>
       </div>
 
-      {/* Heatmap */}
-      <div style={{ maxWidth: 700, margin: '0 auto', padding: '0 20px' }}>
-        <Heatmap activityMap={activity} />
+      {/* Tab Navigation */}
+      <div style={{
+        maxWidth: 800,
+        margin: '0 auto 24px',
+        padding: '0 20px',
+      }}>
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          borderBottom: `2px solid ${dark ? '#1e293b' : '#e2e8f0'}`,
+        }}>
+          <button
+            onClick={() => setActiveTab('progress')}
+            style={{
+              padding: '12px 24px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'progress' ? `3px solid #3b82f6` : '3px solid transparent',
+              color: activeTab === 'progress' ? (dark ? '#f1f5f9' : '#1e293b') : (dark ? '#64748b' : '#94a3b8'),
+              fontWeight: activeTab === 'progress' ? 700 : 400,
+              fontSize: 15,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginBottom: -2,
+            }}
+          >
+            📊 {isRTL ? 'التقدم والأداء' : i18n.language === 'fr' ? 'Progrès' : 'Progress'}
+          </button>
+          <button
+            onClick={() => setActiveTab('reviews')}
+            style={{
+              padding: '12px 24px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'reviews' ? `3px solid #3b82f6` : '3px solid transparent',
+              color: activeTab === 'reviews' ? (dark ? '#f1f5f9' : '#1e293b') : (dark ? '#64748b' : '#94a3b8'),
+              fontWeight: activeTab === 'reviews' ? 700 : 400,
+              fontSize: 15,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginBottom: -2,
+            }}
+          >
+            📝 {isRTL ? 'المراجعات' : i18n.language === 'fr' ? 'Révisions' : 'Reviews'}
+            {user.reviews?.length > 0 && ` (${user.reviews.length})`}
+          </button>
+        </div>
       </div>
+
+      {activeTab === 'progress' && (
+        <>
+          {/* Heatmap */}
+          <div style={{ maxWidth: 700, margin: '0 auto', padding: '0 20px' }}>
+            <Heatmap activityMap={activity} />
+          </div>
 
       {/* Charts */}
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 20px' }}>
@@ -243,8 +336,25 @@ export default function StudentDashboard({ user, logout }) {
           </div>
         )}
       </div>
+        </>
+      )}
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {activeTab === 'reviews' && (
+        <div style={{ marginTop: 20 }}>
+          <ReviewList reviews={user.reviews || []} isTeacher={false} />
+        </div>
+      )}
+
+      {showSettings && <SettingsPanel userId={user.id} onClose={() => setShowSettings(false)} />}
+      {showNotifications && (
+        <NotificationPanel
+          userId={user.id}
+          onClose={() => {
+            setShowNotifications(false);
+            setUnreadCount(getUnreadCount(user.id));
+          }}
+        />
+      )}
     </div>
   );
 }
