@@ -40,6 +40,9 @@ create table if not exists records (
   errors integer not null default 0,
   error_verses text,
   notes text,
+  review_start_date date,
+  completed boolean default false,
+  completion_date timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

@@ -15,6 +15,9 @@ export default function RecordForm({ initial, existingSurahs, onSave, onCancel }
   const [errors, setErrors] = useState(initial?.errors?.toString() || "0");
   const [errorVerses, setErrorVerses] = useState(initial?.errorVerses || "");
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [reviewStartDate, setReviewStartDate] = useState(initial?.review_start_date || "");
+  const [completed, setCompleted] = useState(initial?.completed || false);
+  const [completionDate, setCompletionDate] = useState(initial?.completion_date || "");
   const [formError, setFormError] = useState("");
   const [surahSearch, setSurahSearch] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -29,7 +32,19 @@ export default function RecordForm({ initial, existingSurahs, onSave, onCancel }
     if (isNaN(sc) || sc < 0 || sc > 100) { setFormError(t('record.invalidScore')); return; }
     const e = parseInt(errors);
     if (isNaN(e) || e < 0) { setFormError(t('record.invalidErrors')); return; }
-    onSave({ surah, score: sc, errors: e, errorVerses, notes });
+
+    const recordData = {
+      surah,
+      score: sc,
+      errors: e,
+      errorVerses,
+      notes,
+      review_start_date: reviewStartDate || null,
+      completed,
+      completion_date: completed && completionDate ? completionDate : null,
+    };
+
+    onSave(recordData);
   };
 
   return (
@@ -79,6 +94,49 @@ export default function RecordForm({ initial, existingSurahs, onSave, onCancel }
           <div style={s.fieldGroup}>
             <label style={s.label}>{t('record.errorVerses')}</label>
             <input style={s.input} placeholder={t('record.errorVersesPlaceholder')} value={errorVerses} onChange={e => setErrorVerses(e.target.value)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>
+                {isRTL ? 'تاريخ بدء المراجعة' : i18n.language === 'fr' ? 'Date de début' : 'Review Start Date'}
+              </label>
+              <input
+                style={s.input}
+                type="date"
+                value={reviewStartDate}
+                onChange={e => setReviewStartDate(e.target.value)}
+              />
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>
+                {isRTL ? 'تاريخ الإكمال' : i18n.language === 'fr' ? "Date d'achèvement" : 'Completion Date'}
+              </label>
+              <input
+                style={s.input}
+                type="date"
+                value={completionDate}
+                onChange={e => setCompletionDate(e.target.value)}
+                disabled={!completed}
+              />
+            </div>
+          </div>
+
+          <div style={s.fieldGroup}>
+            <label style={{ ...s.label, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={completed}
+                onChange={e => {
+                  setCompleted(e.target.checked);
+                  if (e.target.checked && !completionDate) {
+                    setCompletionDate(new Date().toISOString().split('T')[0]);
+                  }
+                }}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <span>{isRTL ? 'تم إكمال السورة' : i18n.language === 'fr' ? 'Sourate complétée' : 'Surah Completed'}</span>
+            </label>
           </div>
 
           <div style={s.fieldGroup}>
