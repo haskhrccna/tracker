@@ -28,7 +28,7 @@ export function saveNotifications(userId, notifications) {
 /**
  * Create a notification for a user
  */
-export function createNotification(userId, type, title, message, relatedId = null) {
+export function createNotification(userId, type, title, message, relatedId = null, whatsappStatus = null) {
   const notifications = loadNotifications(userId);
 
   const notification = {
@@ -40,6 +40,8 @@ export function createNotification(userId, type, title, message, relatedId = nul
     related_id: relatedId,
     read: false,
     sent_whatsapp: false,
+    whatsapp_status: whatsappStatus,
+    whatsapp_error: null,
     created_at: new Date().toISOString(),
   };
 
@@ -47,6 +49,53 @@ export function createNotification(userId, type, title, message, relatedId = nul
   saveNotifications(userId, notifications);
 
   return notification;
+}
+
+/**
+ * Update notification WhatsApp status
+ */
+export function updateNotificationWhatsAppStatus(userId, notificationId, status, error = null) {
+  const notifications = loadNotifications(userId);
+  const updated = notifications.map(n =>
+    n.id === notificationId ? {
+      ...n,
+      sent_whatsapp: status === 'delivered' || status === 'sent',
+      whatsapp_status: status,
+      whatsapp_error: error,
+    } : n
+  );
+  saveNotifications(userId, updated);
+}
+
+/**
+ * Retry sending WhatsApp for a notification
+ */
+export async function retryWhatsAppNotification(userId, notificationId) {
+  const notifications = loadNotifications(userId);
+  const notification = notifications.find(n => n.id === notificationId);
+
+  if (!notification) return { success: false, error: 'Notification not found' };
+
+  // Get user data to retrieve WhatsApp number
+  const users = JSON.parse(localStorage.getItem('quran-tracker-users') || '[]');
+  const user = users.find(u => u.id === userId);
+
+  if (!user || !user.whatsapp_number) {
+    return { success: false, error: 'WhatsApp number not found' };
+  }
+
+  // Try to send again
+  updateNotificationWhatsAppStatus(userId, notificationId, 'sending');
+
+  const result = await sendWhatsAppNotification(user.whatsapp_number, notification.message);
+
+  if (result.success) {
+    updateNotificationWhatsAppStatus(userId, notificationId, 'delivered');
+  } else {
+    updateNotificationWhatsAppStatus(userId, notificationId, 'failed', result.error);
+  }
+
+  return result;
 }
 
 /**
@@ -199,15 +248,17 @@ ${review.notes ? `\n📝 ملاحظات المعلم:\n${review.notes}` : ''}
     const result = await sendWhatsAppNotification(student.whatsapp_number, whatsappMessage);
 
     if (result.success) {
-      // Update notification to mark WhatsApp as sent
-      notification.sent_whatsapp = true;
-      notification.whatsapp_status = 'sent';
-      const notifications = loadNotifications(student.id);
-      const updated = notifications.map(n =>
-        n.id === notification.id ? notification : n
-      );
-      saveNotifications(student.id, updated);
+      // Update notification to mark WhatsApp as delivered
+      updateNotificationWhatsAppStatus(student.id, notification.id, 'delivered');
+    } else {
+      // Mark as failed with error message
+      updateNotificationWhatsAppStatus(student.id, notification.id, 'failed', result.error);
     }
+
+    return { notification, whatsappResult: result };
+  } else if (includeWhatsApp && !student.whatsapp_number) {
+    // WhatsApp requested but no number available
+    updateNotificationWhatsAppStatus(student.id, notification.id, 'no_number');
   }
 
   return notification;

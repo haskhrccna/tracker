@@ -4,17 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { SURAHS } from '../utils/constants';
 import { getStyles } from '../utils/styles';
 
-export default function ReviewForm({ studentId, studentName, nextReviewNumber, onSave, onCancel }) {
+export default function ReviewForm({ studentId, studentName, nextReviewNumber, initialReview, onSave, onCancel }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
 
-  const [reviewNumber] = useState(nextReviewNumber);
-  const [reviewDate, setReviewDate] = useState('');
-  const [selectedSurahs, setSelectedSurahs] = useState([]);
+  const isEditMode = !!initialReview;
+  const [reviewNumber] = useState(initialReview?.review_number || nextReviewNumber);
+  const [reviewDate, setReviewDate] = useState(initialReview?.review_date || '');
+  const [selectedSurahs, setSelectedSurahs] = useState(initialReview?.surahs?.map(s => s.surah || s) || []);
   const [searchTerm, setSearchTerm] = useState('');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(initialReview?.notes || '');
   const [formError, setFormError] = useState('');
 
   const filteredSurahs = SURAHS.filter(surah =>
@@ -40,13 +41,21 @@ export default function ReviewForm({ studentId, studentName, nextReviewNumber, o
       return;
     }
 
-    onSave({
+    const reviewData = {
       student_id: studentId,
       review_number: reviewNumber,
       review_date: reviewDate,
       surahs: selectedSurahs,
       notes,
-    });
+    };
+
+    if (isEditMode) {
+      reviewData.id = initialReview.id;
+      reviewData.status = initialReview.status;
+      reviewData.whatsapp_status = initialReview.whatsapp_status;
+    }
+
+    onSave(reviewData);
   };
 
   const styles = {
@@ -206,7 +215,9 @@ export default function ReviewForm({ studentId, studentName, nextReviewNumber, o
       <div style={styles.modal}>
         <div style={styles.header}>
           <div style={styles.title}>
-            📝 {isRTL ? 'إنشاء مراجعة جديدة' : i18n.language === 'fr' ? 'Créer une révision' : 'Create New Review'}
+            {isEditMode ? '✏️' : '📝'} {isEditMode
+              ? (isRTL ? 'تعديل المراجعة' : i18n.language === 'fr' ? 'Modifier la révision' : 'Edit Review')
+              : (isRTL ? 'إنشاء مراجعة جديدة' : i18n.language === 'fr' ? 'Créer une révision' : 'Create New Review')}
             <span style={styles.reviewBadge}>
               {isRTL ? `مراجعة رقم ${reviewNumber}` : i18n.language === 'fr' ? `Révision #${reviewNumber}` : `Review #${reviewNumber}`}
             </span>
@@ -307,7 +318,9 @@ export default function ReviewForm({ studentId, studentName, nextReviewNumber, o
 
         <div style={styles.actions}>
           <button onClick={handleSave} style={styles.saveBtn}>
-            ✅ {isRTL ? 'إنشاء المراجعة وإرسال الإشعار' : i18n.language === 'fr' ? 'Créer et notifier' : 'Create & Notify Student'}
+            ✅ {isEditMode
+              ? (isRTL ? 'حفظ التغييرات' : i18n.language === 'fr' ? 'Enregistrer' : 'Save Changes')
+              : (isRTL ? 'إنشاء المراجعة وإرسال الإشعار' : i18n.language === 'fr' ? 'Créer et notifier' : 'Create & Notify Student')}
           </button>
           <button onClick={onCancel} style={styles.cancelBtn}>
             {isRTL ? 'إلغاء' : i18n.language === 'fr' ? 'Annuler' : 'Cancel'}

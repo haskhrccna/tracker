@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { getGrade } from '../utils/constants';
 import { getStyles } from '../utils/styles';
 
-export default function ReviewList({ reviews, isTeacher = false, onMarkComplete }) {
+export default function ReviewList({ reviews, isTeacher = false, onMarkComplete, onEdit, onDelete, onRetryWhatsApp }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
   const [expandedReview, setExpandedReview] = useState(null);
+  const [retryingWhatsApp, setRetryingWhatsApp] = useState(null);
 
   const sortedReviews = [...reviews].sort((a, b) => {
     // Sort by review_number descending (newest first)
@@ -189,6 +190,64 @@ export default function ReviewList({ reviews, isTeacher = false, onMarkComplete 
       fontSize: 64,
       marginBottom: 16,
     },
+    whatsappStatus: (status) => {
+      let color = dark ? '#64748b' : '#94a3b8';
+      let bg = dark ? '#1e293b' : '#f8fafc';
+      let icon = '⏳';
+
+      if (status === 'delivered' || status === 'sent') {
+        color = '#10b981';
+        bg = dark ? '#065f4620' : '#d1fae5';
+        icon = '✓';
+      } else if (status === 'failed') {
+        color = '#ef4444';
+        bg = dark ? '#7f1d1d20' : '#fee2e2';
+        icon = '✗';
+      } else if (status === 'no_number') {
+        color = '#f59e0b';
+        bg = dark ? '#78350f20' : '#fef3c7';
+        icon = '⚠';
+      }
+
+      return {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 8px',
+        borderRadius: 6,
+        background: bg,
+        color,
+        fontSize: 11,
+        fontWeight: 600,
+        icon,
+      };
+    },
+    actionButtons: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 12,
+    },
+    actionBtn: (variant = 'primary') => {
+      const colors = {
+        primary: { bg: dark ? '#1e40af' : '#3b82f6', color: '#fff' },
+        danger: { bg: dark ? '#7f1d1d' : '#ef4444', color: '#fff' },
+        secondary: { bg: dark ? '#334155' : '#e2e8f0', color: dark ? '#f1f5f9' : '#1e293b' },
+      };
+      return {
+        padding: '8px 16px',
+        borderRadius: 8,
+        border: 'none',
+        background: colors[variant].bg,
+        color: colors[variant].color,
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      };
+    },
   };
 
   if (reviews.length === 0) {
@@ -312,6 +371,69 @@ export default function ReviewList({ reviews, isTeacher = false, onMarkComplete 
                 {review.notes && (
                   <div style={styles.notes}>
                     <strong>{isRTL ? 'ملاحظات المعلم:' : i18n.language === 'fr' ? 'Notes:' : 'Teacher Notes:'}</strong> {review.notes}
+                  </div>
+                )}
+
+                {/* WhatsApp Status for Teachers */}
+                {isTeacher && review.whatsapp_status && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={styles.whatsappStatus(review.whatsapp_status)}>
+                      <span>{styles.whatsappStatus(review.whatsapp_status).icon}</span>
+                      <span>
+                        {review.whatsapp_status === 'delivered' || review.whatsapp_status === 'sent'
+                          ? (isRTL ? 'تم إرسال الواتساب' : i18n.language === 'fr' ? 'WhatsApp envoyé' : 'WhatsApp Delivered')
+                          : review.whatsapp_status === 'failed'
+                          ? (isRTL ? 'فشل إرسال الواتساب' : i18n.language === 'fr' ? 'Échec WhatsApp' : 'WhatsApp Failed')
+                          : review.whatsapp_status === 'no_number'
+                          ? (isRTL ? 'لا يوجد رقم واتساب' : i18n.language === 'fr' ? 'Pas de n° WhatsApp' : 'No WhatsApp Number')
+                          : (isRTL ? 'قيد الإرسال' : i18n.language === 'fr' ? 'En cours' : 'Sending')}
+                      </span>
+                    </div>
+                    {review.whatsapp_status === 'failed' && onRetryWhatsApp && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRetryingWhatsApp(review.id);
+                          onRetryWhatsApp(review.id).finally(() => setRetryingWhatsApp(null));
+                        }}
+                        disabled={retryingWhatsApp === review.id}
+                        style={{
+                          ...styles.actionBtn('secondary'),
+                          marginTop: 8,
+                          opacity: retryingWhatsApp === review.id ? 0.6 : 1,
+                        }}
+                      >
+                        🔄 {retryingWhatsApp === review.id
+                          ? (isRTL ? 'جاري الإعادة...' : i18n.language === 'fr' ? 'Réessai...' : 'Retrying...')
+                          : (isRTL ? 'إعادة محاولة الواتساب' : i18n.language === 'fr' ? 'Réessayer WhatsApp' : 'Retry WhatsApp')}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons for Teachers */}
+                {isTeacher && (onEdit || onDelete) && (
+                  <div style={styles.actionButtons} onClick={(e) => e.stopPropagation()}>
+                    {onEdit && (
+                      <button
+                        onClick={() => onEdit(review)}
+                        style={styles.actionBtn('primary')}
+                      >
+                        ✏️ {isRTL ? 'تعديل' : i18n.language === 'fr' ? 'Modifier' : 'Edit'}
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(isRTL ? 'هل أنت متأكد من حذف هذه المراجعة؟' : i18n.language === 'fr' ? 'Supprimer cette révision ?' : 'Delete this review?')) {
+                            onDelete(review.id);
+                          }
+                        }}
+                        style={styles.actionBtn('danger')}
+                      >
+                        🗑️ {isRTL ? 'حذف' : i18n.language === 'fr' ? 'Supprimer' : 'Delete'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
