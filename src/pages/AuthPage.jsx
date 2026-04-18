@@ -3,29 +3,33 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { getStyles } from '../utils/styles';
 
-export default function AuthPage({ login, register }) {
+export default function AuthPage({ login, register, backendEnabled }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
 
-  const [mode, setMode] = useState("login");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState("student");
-  const [error, setError] = useState("");
+  const [mode, setMode] = useState('login');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [role, setRole] = useState('student');
+  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = () => {
-    setError("");
+  const handleSubmit = async () => {
+    setError('');
     if (!username.trim() || !password.trim()) { setError(t('auth.fillAllFields')); return; }
-    if (mode === "login") {
-      if (!login(username, password)) setError(t('auth.invalidCredentials'));
+    if (mode === 'login') {
+      const success = await login(username, password);
+      if (!success) setError(t('auth.invalidCredentials'));
     } else {
       if (!fullName.trim()) { setError(t('auth.enterFullNameError')); return; }
       if (password.length < 4) { setError(t('auth.passwordMinLength')); return; }
-      if (!register(username, password, role, fullName)) setError(t('auth.usernameTaken'));
+      if (backendEnabled && !email.trim()) { setError(t('auth.emailRequired')); return; }
+      const success = await register({ username, email: email.trim() || null, password, role, fullName, language: i18n.language });
+      if (!success) setError(t('auth.usernameTaken'));
     }
   };
 
@@ -82,22 +86,28 @@ export default function AuthPage({ login, register }) {
             <label style={s.label}>{t('auth.username')}</label>
             <input style={s.input} placeholder={t('auth.enterUsername')} value={username} onChange={e => setUsername(e.target.value)} />
           </div>
+          {mode === 'register' && (
+            <div style={s.fieldGroup}>
+              <label style={s.label}>{t('auth.email')}</label>
+              <input style={s.input} placeholder={t('auth.enterEmail')} value={email} onChange={e => setEmail(e.target.value)} type="email" />
+            </div>
+          )}
           <div style={s.fieldGroup}>
             <label style={s.label}>{t('auth.password')}</label>
-            <div style={{ position: "relative" }}>
-              <input style={s.input} type={showPassword ? "text" : "password"} placeholder={t('auth.enterPassword')} value={password} onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSubmit()} />
-              <button onClick={() => setShowPassword(!showPassword)} style={s.eyeBtn}>{showPassword ? "🙈" : "👁️"}</button>
+            <div style={{ position: 'relative' }}>
+              <input style={s.input} type={showPassword ? 'text' : 'password'} placeholder={t('auth.enterPassword')} value={password} onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+              <button onClick={() => setShowPassword(!showPassword)} style={s.eyeBtn}>{showPassword ? '🙈' : '👁️'}</button>
             </div>
           </div>
-          {mode === "register" && (
+          {mode === 'register' && (
             <div style={s.fieldGroup}>
               <label style={s.label}>{t('auth.accountType')}</label>
               <div style={s.roleRow}>
-                <button onClick={() => setRole("student")} style={{ ...s.roleBtn, ...(role === "student" ? s.roleBtnActive : {}) }}>
+                <button onClick={() => setRole('student')} style={{ ...s.roleBtn, ...(role === 'student' ? s.roleBtnActive : {}) }}>
                   🎓 {t('auth.student')}
                 </button>
-                <button onClick={() => setRole("teacher")} style={{ ...s.roleBtn, ...(role === "teacher" ? s.roleBtnActive : {}) }}>
+                <button onClick={() => setRole('teacher')} style={{ ...s.roleBtn, ...(role === 'teacher' ? s.roleBtnActive : {}) }}>
                   👨‍🏫 {t('auth.teacher')}
                 </button>
               </div>

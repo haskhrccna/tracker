@@ -8,9 +8,11 @@
     "register": "Nouveau Compte",
     "fullName": "Nom Complet",
     "username": "Nom d'utilisateur",
+    "email": "Email",
     "password": "Mot de passe",
     "enterFullName": "Entrez votre nom complet",
     "enterUsername": "Entrez le nom d'utilisateur",
+    "enterEmail": "Entrez votre email",
     "enterPassword": "Entrez le mot de passe",
     "accountType": "Type de Compte",
     "student": "Élève",
@@ -21,6 +23,7 @@
     "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect",
     "enterFullNameError": "Veuillez entrer votre nom complet",
     "passwordMinLength": "Le mot de passe doit comporter au moins 4 caractères",
+    "emailRequired": "L'email est requis pour l'inscription backend",
     "usernameTaken": "Ce nom d'utilisateur est déjà pris"
   },
   "teacher": {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAudio } from '../hooks/useAudio';
@@ -26,7 +26,7 @@ export default function StudentDashboard({ user, logout }) {
   const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
 
   // Load unread notifications count
-  useState(() => {
+  useEffect(() => {
     setUnreadCount(getUnreadCount(user.id));
   }, [user.id]);
 

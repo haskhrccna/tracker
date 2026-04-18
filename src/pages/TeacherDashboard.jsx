@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAudio } from '../hooks/useAudio';
 import { getGrade } from '../utils/constants';
 import { uid, loadActivity, recordDailyActivity, calculateStreak } from '../utils/storage';
+import {
+  saveRecord,
+  updateRecord as updateDbRecord,
+  deleteRecord as deleteDbRecord,
+  saveReview,
+  updateReview as updateDbReview,
+  deleteReview as deleteDbReview,
+} from '../utils/db';
 import { exportToPDF, exportToCSV } from '../utils/exportUtils';
 import { getStyles } from '../utils/styles';
 import RecordForm from '../components/RecordForm';
@@ -15,45 +23,89 @@ import ReviewForm from '../components/ReviewForm';
 import ReviewList from '../components/ReviewList';
 import { notifyReviewAssigned } from '../utils/notificationService';
 
-export default function TeacherDashboard({ user, users, updateUser, logout }) {
+export default function TeacherDashboard({ user, users, updateUser, logout, backendEnabled }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
   const { playing, loading, playSurah } = useAudio();
 
-  const students = users.filter(u => u.role === "student");
+  const [studentList, setStudentList] = useState(users);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showAddRecord, setShowAddRecord] = useState(false);
+
+  useEffect(() => {
+    setStudentList(users);
+  }, [users]);
   const [editRecord, setEditRecord] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [editReview, setEditReview] = useState(null);
   const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
 
-  const filteredStudents = students.filter(s =>
-    s.fullName.includes(searchQuery) || s.username.includes(searchQuery)
+  const filteredStudents = studentList.filter(s =>
+    s.fullName.includes(searchQuery) || s.username?.includes(searchQuery)
   );
 
-  const student = selectedStudent ? users.find(u => u.id === selectedStudent) : null;
+  const student = selectedStudent ? studentList.find(u => u.id === selectedStudent) : null;
 
-  const addRecord = (record) => {
-    updateUser(selectedStudent, u => ({ ...u, records: [...u.records, { ...record, id: uid(), date: new Date().toISOString() }] }));
+  const syncStudent = (studentId, updater) => {
+    setStudentList(prev => prev.map(u => u.id === studentId ? updater(u) : u));
+  };
+
+  const addRecord = async (record) => {
+    const newRecord = { ...record, id: uid(), date: new Date().toISOString() };
+    if (backendEnabled) {
+      const { data, error } = await saveRecord(selectedStudent, newRecord);
+      if (error) {
+        console.error('Save record failed', error);
+        return;
+      }
+      syncStudent(selectedStudent, u => ({ ...u, records: [...(u.records || []), data] }));
+    } else {
+      updateUser(selectedStudent, u => ({ ...u, records: [...(u.records || []), newRecord] }));
+      syncStudent(selectedStudent, u => ({ ...u, records: [...(u.records || []), newRecord] }));
+    }
     recordDailyActivity(selectedStudent);
     setShowAddRecord(false);
   };
 
-  const updateRecord = (recordId, updatedRecord) => {
-    updateUser(selectedStudent, u => ({
-      ...u, records: u.records.map(r => r.id === recordId ? { ...r, ...updatedRecord } : r)
-    }));
+  const updateRecord = async (recordId, updatedRecord) => {
+    if (backendEnabled) {
+      const { data, error } = await updateDbRecord(selectedStudent, recordId, updatedRecord);
+      if (error) {
+        console.error('Update record failed', error);
+        return;
+      }
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        records: (u.records || []).map(r => r.id === recordId ? { ...r, ...data } : r),
+      }));
+    } else {
+      updateUser(selectedStudent, u => ({
+        ...u, records: u.records.map(r => r.id === recordId ? { ...r, ...updatedRecord } : r),
+      }));
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        records: (u.records || []).map(r => r.id === recordId ? { ...r, ...updatedRecord } : r),
+      }));
+    }
     setEditRecord(null);
   };
 
-  const deleteRecord = (recordId) => {
-    updateUser(selectedStudent, u => ({ ...u, records: u.records.filter(r => r.id !== recordId) }));
+  const deleteRecord = async (recordId) => {
+    if (backendEnabled) {
+      const { error } = await deleteDbRecord(selectedStudent, recordId);
+      if (error) {
+        console.error('Delete record failed', error);
+        return;
+      }
+    } else {
+      updateUser(selectedStudent, u => ({ ...u, records: u.records.filter(r => r.id !== recordId) }));
+    }
+    syncStudent(selectedStudent, u => ({ ...u, records: (u.records || []).filter(r => r.id !== recordId) }));
   };
 
   // Review management
@@ -65,7 +117,6 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
       created_at: new Date().toISOString(),
     };
 
-    // Add surahs to review
     review.surahs = reviewData.surahs.map(surah => ({
       surah,
       completed: false,
@@ -74,37 +125,86 @@ export default function TeacherDashboard({ user, users, updateUser, logout }) {
       reviewed_at: null,
     }));
 
-    // Update student with new review
-    updateUser(selectedStudent, u => ({
-      ...u,
-      reviews: [...(u.reviews || []), review],
-    }));
+    if (backendEnabled) {
+      const { data, error } = await saveReview(selectedStudent, review);
+      if (error) {
+        console.error('Save review failed', error);
+        return;
+      }
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        reviews: [...(u.reviews || []), data],
+      }));
+    } else {
+      updateUser(selectedStudent, u => ({
+        ...u,
+        reviews: [...(u.reviews || []), review],
+      }));
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        reviews: [...(u.reviews || []), review],
+      }));
+    }
 
-    // Send notification
-    const studentData = users.find(u => u.id === selectedStudent);
+    const studentData = student || users.find(u => u.id === selectedStudent);
     const result = await notifyReviewAssigned(studentData, review, true);
-
-    // Update review with WhatsApp status
     if (result?.whatsappResult) {
-      review.whatsapp_status = result.whatsappResult.success ? 'delivered' : 'failed';
+      const updatedStatus = result.whatsappResult.success ? 'delivered' : 'failed';
+      const updatePayload = { whatsapp_status: updatedStatus };
+      if (backendEnabled) {
+        await updateDbReview(selectedStudent, review.id, updatePayload);
+      }
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).map(r => r.id === review.id ? { ...r, ...updatePayload } : r),
+      }));
     }
 
     setShowReviewForm(false);
   };
 
-  const updateReview = (reviewData) => {
-    updateUser(selectedStudent, u => ({
-      ...u,
-      reviews: (u.reviews || []).map(r =>
-        r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r
-      ),
-    }));
+  const updateReview = async (reviewData) => {
+    if (backendEnabled) {
+      const { data, error } = await updateDbReview(selectedStudent, reviewData.id, {
+        ...reviewData,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) {
+        console.error('Update review failed', error);
+        return;
+      }
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...data } : r),
+      }));
+    } else {
+      updateUser(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r),
+      }));
+      syncStudent(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r),
+      }));
+    }
     setEditReview(null);
     setShowReviewForm(false);
   };
 
-  const deleteReview = (reviewId) => {
-    updateUser(selectedStudent, u => ({
+  const deleteReview = async (reviewId) => {
+    if (backendEnabled) {
+      const { error } = await deleteDbReview(selectedStudent, reviewId);
+      if (error) {
+        console.error('Delete review failed', error);
+        return;
+      }
+    } else {
+      updateUser(selectedStudent, u => ({
+        ...u,
+        reviews: (u.reviews || []).filter(r => r.id !== reviewId),
+      }));
+    }
+    syncStudent(selectedStudent, u => ({
       ...u,
       reviews: (u.reviews || []).filter(r => r.id !== reviewId),
     }));

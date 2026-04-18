@@ -8,9 +8,10 @@
     "register": "New Account",
     "fullName": "Full Name",
     "username": "Username",
-    "password": "Password",
+    "email": "Email",
     "enterFullName": "Enter your full name",
     "enterUsername": "Enter username",
+    "enterEmail": "Enter your email",
     "enterPassword": "Enter password",
     "accountType": "Account Type",
     "student": "Student",
@@ -21,6 +22,7 @@
     "invalidCredentials": "Invalid username or password",
     "enterFullNameError": "Please enter your full name",
     "passwordMinLength": "Password must be at least 4 characters",
+    "emailRequired": "Email is required for backend signup",
     "usernameTaken": "Username already taken"
   },
   "teacher": {

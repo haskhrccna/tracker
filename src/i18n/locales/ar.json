@@ -8,9 +8,11 @@
     "register": "حساب جديد",
     "fullName": "الاسم الكامل",
     "username": "اسم المستخدم",
+    "email": "البريد الإلكتروني",
     "password": "كلمة المرور",
     "enterFullName": "أدخل اسمك الكامل",
     "enterUsername": "أدخل اسم المستخدم",
+    "enterEmail": "أدخل البريد الإلكتروني",
     "enterPassword": "أدخل كلمة المرور",
     "accountType": "نوع الحساب",
     "student": "طالب",
@@ -21,6 +23,7 @@
     "invalidCredentials": "اسم المستخدم أو كلمة المرور غير صحيحة",
     "enterFullNameError": "يرجى إدخال الاسم الكامل",
     "passwordMinLength": "كلمة المرور يجب أن تكون 4 أحرف على الأقل",
+    "emailRequired": "البريد الإلكتروني مطلوب لتسجيل الاشتراك الخلفي",
     "usernameTaken": "اسم المستخدم مستخدم بالفعل"
   },
   "teacher": {

@@ -9,6 +9,7 @@ create table if not exists profiles (
   username text unique not null,
   full_name text not null,
   role text not null check (role in ('teacher', 'student')),
+  status text not null default 'active' check (status in ('active', 'pending', 'rejected')),
   avatar_url text,
   streak_count integer default 0,
   last_active_date date,
@@ -30,6 +31,47 @@ create policy "Users can update own profile"
 
 create policy "Users can insert own profile"
   on profiles for insert with check (auth.uid() = id);
+
+-- ─── Class / Group Management ──────────────────────────────
+create table if not exists classes (
+  id uuid primary key default gen_random_uuid(),
+  teacher_id uuid not null references profiles(id) on delete cascade,
+  name text not null,
+  description text,
+  created_at timestamptz default now()
+);
+
+alter table classes enable row level security;
+
+create policy "Teachers can manage own classes"
+  on classes for all using (teacher_id = auth.uid());
+
+create table if not exists class_members (
+  id uuid primary key default gen_random_uuid(),
+  class_id uuid not null references classes(id) on delete cascade,
+  student_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique (class_id, student_id)
+);
+
+alter table class_members enable row level security;
+
+create policy "Teachers can manage class members"
+  on class_members for all using (
+    exists (
+      select 1 from classes c where c.id = class_members.class_id and c.teacher_id = auth.uid()
+    )
+  );
+
+create policy "Students can view own class memberships"
+  on class_members for select using (student_id = auth.uid());
+
+create policy "Teachers and members can view classes"
+  on classes for select using (
+    teacher_id = auth.uid() or exists (
+      select 1 from class_members cm where cm.class_id = classes.id and cm.student_id = auth.uid()
+    )
+  );
 
 -- ─── Recitation Records ────────────────────────────────────
 create table if not exists records (
@@ -106,11 +148,16 @@ create index if not exists idx_records_student on records(student_id);
 create index if not exists idx_records_teacher on records(teacher_id);
 create index if not exists idx_activity_user_date on daily_activity(user_id, activity_date);
 create index if not exists idx_goals_user on goals(user_id);
+create index if not exists idx_classes_teacher on classes(teacher_id);
+create index if not exists idx_class_members_class on class_members(class_id);
+create index if not exists idx_class_members_student on class_members(student_id);
 
--- ─── Realtime ──────────────────────────────────────────────
+-- ─── Realtime ──────────────────────────────────────────────────────
 alter publication supabase_realtime add table records;
 alter publication supabase_realtime add table profiles;
 alter publication supabase_realtime add table daily_activity;
+alter publication supabase_realtime add table classes;
+alter publication supabase_realtime add table class_members;
 
 -- ─── Function: Update streak ───────────────────────────────
 create or replace function update_streak()
