@@ -20,9 +20,9 @@ import { getStyles } from './utils/styles';
 import AuthPage from './pages/AuthPage';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 
 function AppInner() {
-  console.log('AppInner mounting');
   const { dark } = useTheme();
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
@@ -35,11 +35,9 @@ function AppInner() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('App useEffect running, backendEnabled:', backendEnabled());
     if (!backendEnabled()) {
       saveUsers(users);
       setLoading(false);
-      console.log('Loading set to false');
       return;
     }
 
@@ -48,6 +46,12 @@ function AppInner() {
       if (session?.data?.session?.user) {
         const profile = await getCurrentUser();
         if (profile) {
+          if (profile.status !== 'active') {
+            setCurrentUser(null);
+            setPage('login');
+            alert('Your account is pending approval.');
+            return;
+          }
           const records = await fetchStudentRecords(profile.id);
           const reviews = await fetchStudentReviews(profile.id);
           setCurrentUser({ ...profile, records, reviews });
@@ -73,6 +77,10 @@ function AppInner() {
       if (error) return false;
       const profile = await getCurrentUser();
       if (!profile) return false;
+      if (profile.status !== 'active') {
+        alert('Your account is pending approval. Please wait for admin approval.');
+        return false;
+      }
       const records = await fetchStudentRecords(profile.id);
       const reviews = await fetchStudentReviews(profile.id);
       setCurrentUser({ ...profile, records, reviews });
@@ -86,10 +94,14 @@ function AppInner() {
 
     const usersList = loadUsers();
     const user = usersList.find(u => u.username === username && u.password === password);
-    if (user) {
+    if (user && user.status === 'active') {
       setCurrentUser(user);
       setPage('dashboard');
       return true;
+    }
+    if (user && user.status !== 'active') {
+      alert('Your account is pending approval.');
+      return false;
     }
     return false;
   };
@@ -98,19 +110,16 @@ function AppInner() {
     if (backendEnabled()) {
       const { data, error } = await signUp({ username, password, email, role, fullName, language });
       if (error || !data) return false;
-      const profile = await getCurrentUser();
-      setCurrentUser({ ...data, records: [], reviews: [] });
-      setPage('dashboard');
+      alert('Registration successful! Your account is pending admin approval. You will receive an email once approved.');
       return true;
     }
 
     const usersList = loadUsers();
     if (usersList.find(u => u.username === username)) return false;
-    const newUser = { id: uid(), username, password, email: email || null, role, fullName, language: language || 'ar', records: [], reviews: [], createdAt: new Date().toISOString() };
+    const newUser = { id: uid(), username, password, email: email || null, role, fullName, language: language || 'ar', status: 'pending', records: [], reviews: [], createdAt: new Date().toISOString() };
     const next = [...usersList, newUser];
     setUsers(next);
-    setCurrentUser(newUser);
-    setPage('dashboard');
+    alert('Registration successful! Your account is pending admin approval.');
     return true;
   };
 
@@ -177,6 +186,13 @@ function AppInner() {
           user={currentUser}
           users={backendEnabled() ? students : users}
           updateUser={updateUser}
+          logout={logout}
+          backendEnabled={backendEnabled()}
+        />
+      )}
+      {page === 'dashboard' && currentUser?.role === 'admin' && (
+        <AdminDashboard
+          user={currentUser}
           logout={logout}
           backendEnabled={backendEnabled()}
         />

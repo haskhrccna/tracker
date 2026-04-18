@@ -14,7 +14,6 @@ export default function AuthPage({ login, register, backendEnabled }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('student');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -28,7 +27,7 @@ export default function AuthPage({ login, register, backendEnabled }) {
       if (!fullName.trim()) { setError(t('auth.enterFullNameError')); return; }
       if (password.length < 4) { setError(t('auth.passwordMinLength')); return; }
       if (backendEnabled && !email.trim()) { setError(t('auth.emailRequired')); return; }
-      const success = await register({ username, email: email.trim() || null, password, role, fullName, language: i18n.language });
+      const success = await register({ username, email: email.trim() || null, password, role: 'student', fullName, language: i18n.language });
       if (!success) setError(t('auth.usernameTaken'));
     }
   };
@@ -100,19 +99,6 @@ export default function AuthPage({ login, register, backendEnabled }) {
               <button onClick={() => setShowPassword(!showPassword)} style={s.eyeBtn}>{showPassword ? '🙈' : '👁️'}</button>
             </div>
           </div>
-          {mode === 'register' && (
-            <div style={s.fieldGroup}>
-              <label style={s.label}>{t('auth.accountType')}</label>
-              <div style={s.roleRow}>
-                <button onClick={() => setRole('student')} style={{ ...s.roleBtn, ...(role === 'student' ? s.roleBtnActive : {}) }}>
-                  🎓 {t('auth.student')}
-                </button>
-                <button onClick={() => setRole('teacher')} style={{ ...s.roleBtn, ...(role === 'teacher' ? s.roleBtnActive : {}) }}>
-                  👨‍🏫 {t('auth.teacher')}
-                </button>
-              </div>
-            </div>
-          )}
           {error && <div style={s.error}>{error}</div>}
           <button onClick={handleSubmit} style={s.primaryBtn}>
             {mode === "login" ? t('auth.submit') : t('auth.createAccount')}

@@ -8,7 +8,7 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique not null,
   full_name text not null,
-  role text not null check (role in ('teacher', 'student')),
+  role text not null check (role in ('teacher', 'student', 'admin')),
   status text not null default 'active' check (status in ('active', 'pending', 'rejected')),
   avatar_url text,
   streak_count integer default 0,
@@ -31,6 +31,11 @@ create policy "Users can update own profile"
 
 create policy "Users can insert own profile"
   on profiles for insert with check (auth.uid() = id);
+
+create policy "Admins can update any profile"
+  on profiles for update using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
 
 -- ─── Class / Group Management ──────────────────────────────
 create table if not exists classes (

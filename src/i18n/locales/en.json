@@ -95,6 +95,12 @@
     "streak": "Day Streak",
     "heatmap": "Memorization Activity",
     "goals": "Goals",
-    "noGoals": "No goals yet"
-  }
+    "noGoals": "No goals yet"  },
+  "admin": {
+    "dashboard": "Admin Dashboard",
+    "pendingApprovals": "Pending Approvals",
+    "noPending": "No pending requests",
+    "addTeacher": "Add Teacher",
+    "notifications": "Notifications",
+    "allUsers": "All Users"  }
 }

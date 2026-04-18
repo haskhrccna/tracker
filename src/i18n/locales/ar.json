@@ -97,5 +97,13 @@
     "heatmap": "نشاط الحفظ",
     "goals": "الأهداف",
     "noGoals": "لا توجد أهداف بعد"
+  },
+  "admin": {
+    "dashboard": "لوحة الإدارة",
+    "pendingApprovals": "طلبات الموافقة المعلقة",
+    "noPending": "لا توجد طلبات معلقة",
+    "addTeacher": "إضافة معلم",
+    "notifications": "الإشعارات",
+    "allUsers": "جميع المستخدمين"
   }
 }

@@ -33,8 +33,8 @@ export async function signIn(usernameOrEmail, password) {
   return { data, error };
 }
 
-export async function signUp({ username, email, password, role, fullName, language }) {
-  const status = role === 'teacher' ? 'pending' : 'active';
+export async function signUp({ username, email, password, role = 'student', fullName, language }) {
+  const status = 'pending';
 
   if (!backendEnabled()) {
     const users = loadUsers();
@@ -77,7 +77,22 @@ export async function signUp({ username, email, password, role, fullName, langua
   };
 
   const { error: insertError } = await supabase.from('profiles').insert([profile]);
-  return { data: authData.user ? { ...profile, id: authData.user.id } : profile, error: insertError };
+  if (insertError) return { data: null, error: insertError };
+
+  // Create notification for admin
+  const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin');
+  if (admins && admins.length > 0) {
+    const notifications = admins.map(admin => ({
+      user_id: admin.id,
+      type: 'user_signup_request',
+      title: 'New User Signup Request',
+      message: `${fullName} (${username}) has requested to join as ${role}. Please review and approve.`,
+      related_id: profile.id,
+    }));
+    await supabase.from('notifications').insert(notifications);
+  }
+
+  return { data: authData.user ? { ...profile, id: authData.user.id } : profile, error: null };
 }
 
 export async function signOut() {
@@ -168,6 +183,89 @@ export async function updateProfileStatus(userId, status) {
   const { data, error } = await supabase.from('profiles').update({ status }).eq('id', userId);
   return { data: data?.[0] || null, error };
 }
+
+export async function addTeacher({ username, email, password, fullName, language }) {
+  if (!backendEnabled()) {
+    const users = loadUsers();
+    if (users.find(u => u.username === username || (email && u.email === email))) {
+      return { data: null, error: { message: 'User already exists' } };
+    }
+
+    const newUser = {
+      id: uid(),
+      username,
+      email: email || null,
+      password,
+      role: 'teacher',
+      fullName,
+      language: language || 'ar',
+      whatsapp_number: null,
+      status: 'active',
+      records: [],
+      reviews: [],
+      createdAt: new Date().toISOString(),
+    };
+    saveUsers([...users, newUser]);
+    return { data: newUser, error: null };
+  }
+
+  const signupEmail = email || `${username}@qurantracker.local`;
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({ email: signupEmail, password });
+  if (authError) return { data: null, error: authError };
+
+  const profile = {
+    id: authData.user?.id || uid(),
+    username,
+    email: signupEmail,
+    role: 'teacher',
+    status: 'active',
+    full_name: fullName,
+    preferred_language: language || 'ar',
+    whatsapp_number: null,
+    created_at: new Date().toISOString(),
+  };
+
+  const { error: insertError } = await supabase.from('profiles').insert([profile]);
+  return { data: authData.user ? { ...profile, id: authData.user.id } : profile, error: insertError };
+}
+
+export async function fetchPendingUsers() {
+  if (!backendEnabled()) {
+    const users = loadUsers();
+    return users.filter(u => u.status === 'pending');
+  }
+
+  const { data, error } = await supabase.from('profiles').select('*').eq('status', 'pending');
+  return data || [];
+}
+
+export async function fetchAllUsers() {
+  if (!backendEnabled()) {
+    return loadUsers();
+  }
+
+  const { data, error } = await supabase.from('profiles').select('*');
+  return data || [];
+}
+
+export async function fetchNotifications(userId) {
+  if (!backendEnabled()) {
+    return loadLocalNotifications(userId);
+  }
+
+  const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+  return data || [];
+}
+
+export async function markNotificationAsRead(notifId) {
+  if (!backendEnabled()) {
+    return markLocalNotificationAsRead(notifId);
+  }
+
+  const { error } = await supabase.from('notifications').update({ read: true }).eq('id', notifId);
+  return { error };
+}
+
 
 export function loadClasses() {
   try {
