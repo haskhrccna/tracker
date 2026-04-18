@@ -22,6 +22,7 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 
 function AppInner() {
+  console.log('AppInner mounting');
   const { dark } = useTheme();
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
@@ -34,9 +35,11 @@ function AppInner() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('App useEffect running, backendEnabled:', backendEnabled());
     if (!backendEnabled()) {
       saveUsers(users);
       setLoading(false);
+      console.log('Loading set to false');
       return;
     }
 
