@@ -3,7 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { useAudio } from '../hooks/useAudio';
 import { getGrade } from '../utils/constants';
-import { uid, loadActivity, recordDailyActivity, calculateStreak } from '../utils/storage';
+import { loadActivity, recordDailyActivity, calculateStreak } from '../utils/storage';
 import {
   saveRecord,
   updateRecord as updateDbRecord,
@@ -23,7 +23,7 @@ import ReviewForm from '../components/ReviewForm';
 import ReviewList from '../components/ReviewList';
 import { notifyReviewAssigned } from '../utils/notificationService';
 
-export default function TeacherDashboard({ user, users, updateUser, logout, backendEnabled }) {
+export default function TeacherDashboard({ user, users, updateUser, logout }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
@@ -43,10 +43,10 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
   const [showSettings, setShowSettings] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [editReview, setEditReview] = useState(null);
-  const [activeTab, setActiveTab] = useState('progress'); // progress, reviews
+  const [activeTab, setActiveTab] = useState('progress');
 
   const filteredStudents = studentList.filter(s =>
-    s.fullName.includes(searchQuery) || s.username?.includes(searchQuery)
+    s.fullName.includes(searchQuery) || s.username?.includes(searchQuery) || s.full_name?.includes(searchQuery)
   );
 
   const student = selectedStudent ? studentList.find(u => u.id === selectedStudent) : null;
@@ -55,63 +55,44 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
     setStudentList(prev => prev.map(u => u.id === studentId ? updater(u) : u));
   };
 
+  const getDisplayName = (u) => u.fullName || u.full_name || '';
+
   const addRecord = async (record) => {
-    const newRecord = { ...record, id: uid(), date: new Date().toISOString() };
-    if (backendEnabled) {
-      const { data, error } = await saveRecord(selectedStudent, newRecord);
-      if (error) {
-        console.error('Save record failed', error);
-        return;
-      }
-      syncStudent(selectedStudent, u => ({ ...u, records: [...(u.records || []), data] }));
-    } else {
-      updateUser(selectedStudent, u => ({ ...u, records: [...(u.records || []), newRecord] }));
-      syncStudent(selectedStudent, u => ({ ...u, records: [...(u.records || []), newRecord] }));
+    const newRecord = { ...record, date: new Date().toISOString() };
+    const { data, error } = await saveRecord(selectedStudent, newRecord);
+    if (error) {
+      console.error('Save record failed', error);
+      return;
     }
+    syncStudent(selectedStudent, u => ({ ...u, records: [...(u.records || []), data] }));
     recordDailyActivity(selectedStudent);
     setShowAddRecord(false);
   };
 
   const updateRecord = async (recordId, updatedRecord) => {
-    if (backendEnabled) {
-      const { data, error } = await updateDbRecord(selectedStudent, recordId, updatedRecord);
-      if (error) {
-        console.error('Update record failed', error);
-        return;
-      }
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        records: (u.records || []).map(r => r.id === recordId ? { ...r, ...data } : r),
-      }));
-    } else {
-      updateUser(selectedStudent, u => ({
-        ...u, records: u.records.map(r => r.id === recordId ? { ...r, ...updatedRecord } : r),
-      }));
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        records: (u.records || []).map(r => r.id === recordId ? { ...r, ...updatedRecord } : r),
-      }));
+    const { data, error } = await updateDbRecord(selectedStudent, recordId, updatedRecord);
+    if (error) {
+      console.error('Update record failed', error);
+      return;
     }
+    syncStudent(selectedStudent, u => ({
+      ...u,
+      records: (u.records || []).map(r => r.id === recordId ? { ...r, ...data } : r),
+    }));
     setEditRecord(null);
   };
 
   const deleteRecord = async (recordId) => {
-    if (backendEnabled) {
-      const { error } = await deleteDbRecord(selectedStudent, recordId);
-      if (error) {
-        console.error('Delete record failed', error);
-        return;
-      }
-    } else {
-      updateUser(selectedStudent, u => ({ ...u, records: u.records.filter(r => r.id !== recordId) }));
+    const { error } = await deleteDbRecord(selectedStudent, recordId);
+    if (error) {
+      console.error('Delete record failed', error);
+      return;
     }
     syncStudent(selectedStudent, u => ({ ...u, records: (u.records || []).filter(r => r.id !== recordId) }));
   };
 
-  // Review management
   const createReview = async (reviewData) => {
     const review = {
-      id: uid(),
       ...reviewData,
       status: 'pending',
       created_at: new Date().toISOString(),
@@ -125,38 +106,25 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
       reviewed_at: null,
     }));
 
-    if (backendEnabled) {
-      const { data, error } = await saveReview(selectedStudent, review);
-      if (error) {
-        console.error('Save review failed', error);
-        return;
-      }
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        reviews: [...(u.reviews || []), data],
-      }));
-    } else {
-      updateUser(selectedStudent, u => ({
-        ...u,
-        reviews: [...(u.reviews || []), review],
-      }));
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        reviews: [...(u.reviews || []), review],
-      }));
+    const { data, error } = await saveReview(selectedStudent, review);
+    if (error) {
+      console.error('Save review failed', error);
+      return;
     }
+    syncStudent(selectedStudent, u => ({
+      ...u,
+      reviews: [...(u.reviews || []), data],
+    }));
 
     const studentData = student || users.find(u => u.id === selectedStudent);
     const result = await notifyReviewAssigned(studentData, review, true);
     if (result?.whatsappResult) {
       const updatedStatus = result.whatsappResult.success ? 'delivered' : 'failed';
       const updatePayload = { whatsapp_status: updatedStatus };
-      if (backendEnabled) {
-        await updateDbReview(selectedStudent, review.id, updatePayload);
-      }
+      await updateDbReview(selectedStudent, data.id, updatePayload);
       syncStudent(selectedStudent, u => ({
         ...u,
-        reviews: (u.reviews || []).map(r => r.id === review.id ? { ...r, ...updatePayload } : r),
+        reviews: (u.reviews || []).map(r => r.id === data.id ? { ...r, ...updatePayload } : r),
       }));
     }
 
@@ -164,45 +132,27 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
   };
 
   const updateReview = async (reviewData) => {
-    if (backendEnabled) {
-      const { data, error } = await updateDbReview(selectedStudent, reviewData.id, {
-        ...reviewData,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) {
-        console.error('Update review failed', error);
-        return;
-      }
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...data } : r),
-      }));
-    } else {
-      updateUser(selectedStudent, u => ({
-        ...u,
-        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r),
-      }));
-      syncStudent(selectedStudent, u => ({
-        ...u,
-        reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...reviewData, updated_at: new Date().toISOString() } : r),
-      }));
+    const { data, error } = await updateDbReview(selectedStudent, reviewData.id, {
+      ...reviewData,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      console.error('Update review failed', error);
+      return;
     }
+    syncStudent(selectedStudent, u => ({
+      ...u,
+      reviews: (u.reviews || []).map(r => r.id === reviewData.id ? { ...r, ...data } : r),
+    }));
     setEditReview(null);
     setShowReviewForm(false);
   };
 
   const deleteReview = async (reviewId) => {
-    if (backendEnabled) {
-      const { error } = await deleteDbReview(selectedStudent, reviewId);
-      if (error) {
-        console.error('Delete review failed', error);
-        return;
-      }
-    } else {
-      updateUser(selectedStudent, u => ({
-        ...u,
-        reviews: (u.reviews || []).filter(r => r.id !== reviewId),
-      }));
+    const { error } = await deleteDbReview(selectedStudent, reviewId);
+    if (error) {
+      console.error('Delete review failed', error);
+      return;
     }
     syncStudent(selectedStudent, u => ({
       ...u,
@@ -230,12 +180,13 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
     const studentData = users.find(u => u.id === selectedStudent);
     const result = await notifyReviewAssigned(studentData, review, true);
 
-    // Update review with new WhatsApp status
     if (result?.whatsappResult) {
-      updateUser(selectedStudent, u => ({
+      const updatedStatus = result.whatsappResult.success ? 'delivered' : 'failed';
+      await updateDbReview(selectedStudent, reviewId, { whatsapp_status: updatedStatus });
+      syncStudent(selectedStudent, u => ({
         ...u,
         reviews: (u.reviews || []).map(r =>
-          r.id === reviewId ? { ...r, whatsapp_status: result.whatsappResult.success ? 'delivered' : 'failed' } : r
+          r.id === reviewId ? { ...r, whatsapp_status: updatedStatus } : r
         ),
       }));
     }
@@ -266,17 +217,15 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
         }
       `}</style>
 
-      {/* Mobile menu button */}
       <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} style={s.mobileMenuBtn}>
         {mobileMenuOpen ? "✕" : "☰"}
       </button>
 
-      {/* Sidebar */}
       <div className={`sidebar ${mobileMenuOpen ? "open" : ""}`} style={s.sidebar}>
         <div style={s.sidebarHeader}>
           <div style={s.sidebarIcon}>👨‍🏫</div>
           <h2 style={s.sidebarTitle}>{t('teacher.dashboard')}</h2>
-          <p style={s.sidebarName}>{user.fullName}</p>
+          <p style={s.sidebarName}>{getDisplayName(user)}</p>
         </div>
 
         <div style={{ padding: "0 16px 12px" }}>
@@ -286,7 +235,7 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
         <div style={s.studentList}>
           {filteredStudents.length === 0 && (
             <div style={s.emptyMsg}>
-              {students.length === 0 ? t('teacher.noStudents') : t('teacher.noResults')}
+              {users.length === 0 ? t('teacher.noStudents') : t('teacher.noResults')}
             </div>
           )}
           {filteredStudents.map(st => {
@@ -295,9 +244,9 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
             return (
               <button key={st.id} onClick={() => { setSelectedStudent(st.id); setMobileMenuOpen(false); }}
                 style={{ ...s.studentItem, ...(selectedStudent === st.id ? s.studentItemActive : {}) }}>
-                <div style={s.studentAvatar}>{st.fullName.charAt(0)}</div>
+                <div style={s.studentAvatar}>{getDisplayName(st).charAt(0)}</div>
                 <div style={{ flex: 1, textAlign: isRTL ? "right" : "left" }}>
-                  <div style={s.studentItemName}>{st.fullName}</div>
+                  <div style={s.studentItemName}>{getDisplayName(st)}</div>
                   <div style={s.studentItemMeta}>{st.records.length} {t('teacher.surahs')} • {grade.emoji} {grade.label}</div>
                 </div>
                 <div style={{ ...s.miniScore, background: grade.color + "22", color: grade.color }}>{avg}%</div>
@@ -314,28 +263,27 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
         <button onClick={logout} style={s.logoutBtn}>🚪 {t('common.logout')}</button>
       </div>
 
-      {/* Main Content */}
       <div className="main-content" style={s.mainContent}>
         {!student ? (
           <div style={s.welcomeArea}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>📚</div>
-            <h2 style={s.welcomeTitle}>{t('teacher.welcome')} {user.fullName}</h2>
+            <h2 style={s.welcomeTitle}>{t('teacher.welcome')} {getDisplayName(user)}</h2>
             <p style={s.welcomeText}>{t('teacher.selectStudent')}</p>
             <div style={s.statsRow}>
               <div style={s.statCard}>
-                <div style={s.statNumber}>{students.length}</div>
+                <div style={s.statNumber}>{users.length}</div>
                 <div style={s.statLabel}>{t('teacher.totalStudents')}</div>
               </div>
               <div style={s.statCard}>
-                <div style={s.statNumber}>{students.reduce((a, s) => a + s.records.length, 0)}</div>
+                <div style={s.statNumber}>{users.reduce((a, s) => a + s.records.length, 0)}</div>
                 <div style={s.statLabel}>{t('teacher.totalRecitations')}</div>
               </div>
               <div style={s.statCard}>
                 <div style={s.statNumber}>
-                  {students.length ? Math.round(students.reduce((a, s) => {
+                  {users.length ? Math.round(users.reduce((a, s) => {
                     const avg = s.records.length ? s.records.reduce((x, r) => x + r.score, 0) / s.records.length : 0;
                     return a + avg;
-                  }, 0) / students.length) : 0}%
+                  }, 0) / users.length) : 0}%
                 </div>
                 <div style={s.statLabel}>{t('teacher.overallAverage')}</div>
               </div>
@@ -343,13 +291,12 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
           </div>
         ) : (
           <div style={{ animation: "slideIn .4s ease" }}>
-            {/* Student Header */}
             <div style={s.studentHeader}>
               <div style={s.studentHeaderRight}>
-                <div style={s.bigAvatar}>{student.fullName.charAt(0)}</div>
+                <div style={s.bigAvatar}>{getDisplayName(student).charAt(0)}</div>
                 <div>
-                  <h2 style={s.studentHeaderName}>{student.fullName}</h2>
-                  <p style={s.studentHeaderMeta}>@{student.username} • {t('teacher.joined')} {new Date(student.createdAt).toLocaleDateString(i18n.language === 'ar' ? "ar-SA" : i18n.language === 'fr' ? "fr-FR" : "en-US")}</p>
+                  <h2 style={s.studentHeaderName}>{getDisplayName(student)}</h2>
+                  <p style={s.studentHeaderMeta}>@{student.username} • {t('teacher.joined')} {new Date(student.created_at || student.createdAt).toLocaleDateString(i18n.language === 'ar' ? "ar-SA" : i18n.language === 'fr' ? "fr-FR" : "en-US")}</p>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -367,7 +314,6 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
               </div>
             </div>
 
-            {/* Quick Stats */}
             <div style={s.quickStats}>
               <div style={s.qStat}>
                 <span style={s.qStatNum}>{student.records.length}</span>
@@ -383,7 +329,6 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
               </div>
             </div>
 
-            {/* Tab Navigation */}
             <div style={{
               display: 'flex',
               gap: 12,
@@ -429,33 +374,28 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
 
             {activeTab === 'progress' && (
               <>
-                {/* Heatmap */}
                 <Heatmap activityMap={studentActivity} />
 
-            {/* Charts */}
             <GradeDistributionChart records={student.records} />
             <ScoreProgressChart records={student.records} />
 
-            {/* Surah List */}
             <div style={{ marginTop: 40, marginBottom: 40 }}>
               <SuraList records={student.records} />
             </div>
 
-            {/* Toolbar: Add Record + Export */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
               <h3 style={s.sectionTitle}>{t('teacher.recitationLog')}</h3>
               <div style={s.toolbar}>
-                <button onClick={() => exportToPDF(student.records, student.fullName, overallScore)} style={s.toolbarBtn}>
+                <button onClick={() => exportToPDF(student.records, getDisplayName(student), overallScore)} style={s.toolbarBtn}>
                   📄 {t('common.exportPDF')}
                 </button>
-                <button onClick={() => exportToCSV(student.records, student.fullName)} style={s.toolbarBtn}>
+                <button onClick={() => exportToCSV(student.records, getDisplayName(student))} style={s.toolbarBtn}>
                   📊 {t('common.exportCSV')}
                 </button>
                 <button onClick={() => setShowAddRecord(true)} style={s.addBtn}>+ {t('teacher.addRecitation')}</button>
               </div>
             </div>
 
-            {/* Add/Edit Record Modal */}
             {(showAddRecord || editRecord) && (
               <RecordForm
                 initial={editRecord}
@@ -465,7 +405,6 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
               />
             )}
 
-            {/* Records List */}
             {student.records.length === 0 ? (
               <div style={s.emptyRecords}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>📝</div>
@@ -615,7 +554,7 @@ export default function TeacherDashboard({ user, users, updateUser, logout, back
                 {showReviewForm && (
                   <ReviewForm
                     studentId={student.id}
-                    studentName={student.fullName}
+                    studentName={getDisplayName(student)}
                     nextReviewNumber={getNextReviewNumber()}
                     initialReview={editReview}
                     onSave={handleSaveReview}

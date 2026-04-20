@@ -1,20 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
-import { loadUsers, saveUsers, uid } from './utils/storage';
+import { supabase } from './lib/supabase';
 import {
-  backendEnabled,
   signIn,
   signUp,
   signOut,
-  getSession,
   getCurrentUser,
-  fetchUsers,
-  fetchTeacherStudents,
-  fetchUserById,
   fetchStudentRecords,
   fetchStudentReviews,
+  fetchTeacherStudents,
   updateUserProfile,
+  fetchUserById,
 } from './utils/db';
 import { getStyles } from './utils/styles';
 import AuthPage from './pages/AuthPage';
@@ -28,27 +25,44 @@ function AppInner() {
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
 
-  const [users, setUsers] = useState(() => (backendEnabled() ? [] : loadUsers()));
   const [students, setStudents] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [page, setPage] = useState('login');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!backendEnabled()) {
-      saveUsers(users);
-      setLoading(false);
-      return;
+  const loadUserProfile = useCallback(async (userId) => {
+    const profile = await getCurrentUser();
+    if (!profile) return null;
+    if (profile.status !== 'active') return null;
+
+    const records = await fetchStudentRecords(profile.id);
+    const reviews = await fetchStudentReviews(profile.id);
+    const user = { ...profile, records, reviews };
+    setCurrentUser(user);
+    setPage('dashboard');
+
+    if (profile.role === 'teacher') {
+      const teacherStudents = await fetchTeacherStudents(profile.id);
+      setStudents(teacherStudents);
     }
 
-    (async () => {
-      const session = await getSession();
-      if (session?.data?.session?.user) {
-        const profile = await getCurrentUser();
-        if (profile) {
+    return user;
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+          const profile = await getCurrentUser();
+          if (!profile) {
+            setLoading(false);
+            return;
+          }
           if (profile.status !== 'active') {
+            await supabase.auth.signOut();
             setCurrentUser(null);
             setPage('login');
+            setLoading(false);
             alert('Your account is pending approval.');
             return;
           }
@@ -60,10 +74,25 @@ function AppInner() {
             const teacherStudents = await fetchTeacherStudents(profile.id);
             setStudents(teacherStudents);
           }
+          setLoading(false);
+        } else if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+          setStudents([]);
+          setPage('login');
+          setLoading(false);
         }
       }
-      setLoading(false);
-    })();
+    );
+
+    // Initial check in case onAuthStateChange doesn't fire for existing sessions
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) {
+        setLoading(false);
+      }
+      // If there is a session, onAuthStateChange will handle it
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -72,86 +101,45 @@ function AppInner() {
   }, [i18n.language]);
 
   const login = async (username, password) => {
-    if (backendEnabled()) {
-      const { data, error } = await signIn(username, password);
-      if (error) return false;
-      const profile = await getCurrentUser();
-      if (!profile) return false;
-      if (profile.status !== 'active') {
-        alert('Your account is pending approval. Please wait for admin approval.');
-        return false;
-      }
-      const records = await fetchStudentRecords(profile.id);
-      const reviews = await fetchStudentReviews(profile.id);
-      setCurrentUser({ ...profile, records, reviews });
-      setPage('dashboard');
-      if (profile.role === 'teacher') {
-        const teacherStudents = await fetchTeacherStudents(profile.id);
-        setStudents(teacherStudents);
-      }
-      return true;
-    }
-
-    const usersList = loadUsers();
-    const user = usersList.find(u => u.username === username && u.password === password);
-    if (user && user.status === 'active') {
-      setCurrentUser(user);
-      setPage('dashboard');
-      return true;
-    }
-    if (user && user.status !== 'active') {
-      alert('Your account is pending approval.');
+    const { error } = await signIn(username, password);
+    if (error) return false;
+    // onAuthStateChange will handle setting currentUser and page
+    // But we need to wait for profile load and check status
+    const profile = await getCurrentUser();
+    if (!profile) return false;
+    if (profile.status !== 'active') {
+      alert('Your account is pending approval. Please wait for admin approval.');
+      await supabase.auth.signOut();
       return false;
     }
-    return false;
+    return true;
   };
 
   const register = async ({ username, password, email, role, fullName, language }) => {
-    if (backendEnabled()) {
-      const { data, error } = await signUp({ username, password, email, role, fullName, language });
-      if (error || !data) return false;
-      alert('Registration successful! Your account is pending admin approval. You will receive an email once approved.');
-      return true;
-    }
-
-    const usersList = loadUsers();
-    if (usersList.find(u => u.username === username)) return false;
-    const newUser = { id: uid(), username, password, email: email || null, role, fullName, language: language || 'ar', status: 'pending', records: [], reviews: [], createdAt: new Date().toISOString() };
-    const next = [...usersList, newUser];
-    setUsers(next);
-    alert('Registration successful! Your account is pending admin approval.');
+    const { data, error } = await signUp({ username, password, email, role, fullName, language });
+    if (error || !data) return false;
+    alert('Registration successful! Your account is pending admin approval. You will receive an email once approved.');
     return true;
   };
 
   const updateUser = async (userId, updater) => {
-    if (backendEnabled()) {
-      const current = await fetchUserById(userId);
-      if (!current) return;
-      const updated = updater(current);
-      const { data, error } = await updateUserProfile(userId, {
-        full_name: updated.fullName || updated.full_name,
-        whatsapp_number: updated.whatsapp_number,
-        language: updated.language,
-      });
-      if (data) {
-        setCurrentUser(prev => prev?.id === userId ? { ...prev, ...updated } : prev);
-      }
-      return;
-    }
-
-    setUsers(prev => {
-      const next = prev.map(u => u.id === userId ? updater(u) : u);
-      const me = next.find(u => u.id === currentUser?.id);
-      if (me) setCurrentUser(me);
-      return next;
+    const current = await fetchUserById(userId);
+    if (!current) return;
+    const updated = updater(current);
+    const { data } = await updateUserProfile(userId, {
+      full_name: updated.fullName || updated.full_name,
+      whatsapp_number: updated.whatsapp_number,
+      language: updated.language,
     });
+    if (data) {
+      setCurrentUser(prev => prev?.id === userId ? { ...prev, ...updated } : prev);
+    }
   };
 
   const logout = async () => {
-    if (backendEnabled()) {
-      await signOut();
-    }
+    await signOut();
     setCurrentUser(null);
+    setStudents([]);
     setPage('login');
   };
 
@@ -180,25 +168,23 @@ function AppInner() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
       `}</style>
-      {page === 'login' && <AuthPage login={login} register={register} backendEnabled={backendEnabled()} />}
+      {page === 'login' && <AuthPage login={login} register={register} />}
       {page === 'dashboard' && currentUser?.role === 'teacher' && (
         <TeacherDashboard
           user={currentUser}
-          users={backendEnabled() ? students : users}
+          users={students}
           updateUser={updateUser}
           logout={logout}
-          backendEnabled={backendEnabled()}
         />
       )}
       {page === 'dashboard' && currentUser?.role === 'admin' && (
         <AdminDashboard
           user={currentUser}
           logout={logout}
-          backendEnabled={backendEnabled()}
         />
       )}
       {page === 'dashboard' && currentUser?.role === 'student' && (
-        <StudentDashboard user={currentUser} logout={logout} backendEnabled={backendEnabled()} />
+        <StudentDashboard user={currentUser} logout={logout} />
       )}
     </div>
   );

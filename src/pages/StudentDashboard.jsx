@@ -12,7 +12,7 @@ import { GradeDistributionChart, ScoreProgressChart } from '../components/ScoreC
 import SuraList from '../components/SuraList';
 import ReviewList from '../components/ReviewList';
 import NotificationPanel from '../components/NotificationPanel';
-import { getUnreadCount } from '../utils/notificationService';
+import { getUnreadNotificationCount } from '../utils/db';
 
 export default function StudentDashboard({ user, logout }) {
   const { dark } = useTheme();
@@ -27,13 +27,14 @@ export default function StudentDashboard({ user, logout }) {
 
   // Load unread notifications count
   useEffect(() => {
-    setUnreadCount(getUnreadCount(user.id));
+    getUnreadNotificationCount(user.id).then(setUnreadCount);
   }, [user.id]);
 
   const overallScore = user.records.length
     ? Math.round(user.records.reduce((s, r) => s + r.score, 0) / user.records.length)
     : 0;
   const grade = getGrade(overallScore);
+  const displayName = user.fullName || user.full_name || user.full_name || '';
   const activity = loadActivity(user.id);
   const streak = calculateStreak(activity);
 
@@ -42,9 +43,9 @@ export default function StudentDashboard({ user, logout }) {
       {/* Top Bar */}
       <div style={s.studentTopBar}>
         <div style={s.studentTopRight}>
-          <div style={s.studentTopAvatar}>{user.fullName.charAt(0)}</div>
+          <div style={s.studentTopAvatar}>{user.fullName || user.full_name.charAt(0)}</div>
           <div>
-            <h2 style={s.studentTopName}>{user.fullName}</h2>
+            <h2 style={s.studentTopName}>{user.fullName || user.full_name}</h2>
             <p style={s.studentTopMeta}>{t('student.account')}</p>
           </div>
         </div>
@@ -213,10 +214,10 @@ export default function StudentDashboard({ user, logout }) {
           <h3 style={{ ...s.sectionTitle, marginBottom: 0 }}>{t('student.recitationLog')}</h3>
           {user.records.length > 0 && (
             <div style={s.toolbar}>
-              <button onClick={() => exportToPDF(user.records, user.fullName, overallScore)} style={s.toolbarBtn}>
+              <button onClick={() => exportToPDF(user.records, user.fullName || user.full_name, overallScore)} style={s.toolbarBtn}>
                 📄 {t('common.exportPDF')}
               </button>
-              <button onClick={() => exportToCSV(user.records, user.fullName)} style={s.toolbarBtn}>
+              <button onClick={() => exportToCSV(user.records, user.fullName || user.full_name)} style={s.toolbarBtn}>
                 📊 {t('common.exportCSV')}
               </button>
             </div>
@@ -351,7 +352,7 @@ export default function StudentDashboard({ user, logout }) {
           userId={user.id}
           onClose={() => {
             setShowNotifications(false);
-            setUnreadCount(getUnreadCount(user.id));
+            getUnreadNotificationCount(user.id).then(setUnreadCount);
           }}
         />
       )}

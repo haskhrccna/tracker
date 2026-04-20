@@ -21,9 +21,17 @@
     "fillAllFields": "Please fill all fields",
     "invalidCredentials": "Invalid username or password",
     "enterFullNameError": "Please enter your full name",
-    "passwordMinLength": "Password must be at least 4 characters",
-    "emailRequired": "Email is required for backend signup",
-    "usernameTaken": "Username already taken"
+    "passwordMinLength": "Password must be at least 8 characters",
+    "emailRequired": "Email is required",
+    "usernameTaken": "Username already taken",
+    "forgotPassword": "Forgot Password?",
+    "resetPassword": "Reset Password",
+    "resetPasswordSent": "Password reset email sent. Check your inbox.",
+    "enterEmailForReset": "Enter your email to receive a reset link",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "passwordResetSuccess": "Password reset successfully!",
+    "passwordsDoNotMatch": "Passwords do not match"
   },
   "teacher": {
     "dashboard": "Teacher Dashboard",

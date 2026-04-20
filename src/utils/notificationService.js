@@ -1,162 +1,8 @@
-import { uid } from './storage';
+import { createNotification, updateReview as updateDbReview } from './db';
+import { supabase } from '../lib/supabase';
 
 /**
- * Notification Service
- * Handles in-app notifications and WhatsApp message integration
- */
-
-// Store notifications in localStorage (will be replaced with Supabase in production)
-const NOTIFICATIONS_KEY = 'quran-tracker-notifications';
-
-export function loadNotifications(userId) {
-  try {
-    const data = localStorage.getItem(`${NOTIFICATIONS_KEY}-${userId}`);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveNotifications(userId, notifications) {
-  try {
-    localStorage.setItem(`${NOTIFICATIONS_KEY}-${userId}`, JSON.stringify(notifications));
-  } catch (e) {
-    console.error('Notification storage error:', e);
-  }
-}
-
-/**
- * Create a notification for a user
- */
-export function createNotification(userId, type, title, message, relatedId = null, whatsappStatus = null) {
-  const notifications = loadNotifications(userId);
-
-  const notification = {
-    id: uid(),
-    user_id: userId,
-    type,
-    title,
-    message,
-    related_id: relatedId,
-    read: false,
-    sent_whatsapp: false,
-    whatsapp_status: whatsappStatus,
-    whatsapp_error: null,
-    created_at: new Date().toISOString(),
-  };
-
-  notifications.push(notification);
-  saveNotifications(userId, notifications);
-
-  return notification;
-}
-
-/**
- * Update notification WhatsApp status
- */
-export function updateNotificationWhatsAppStatus(userId, notificationId, status, error = null) {
-  const notifications = loadNotifications(userId);
-  const updated = notifications.map(n =>
-    n.id === notificationId ? {
-      ...n,
-      sent_whatsapp: status === 'delivered' || status === 'sent',
-      whatsapp_status: status,
-      whatsapp_error: error,
-    } : n
-  );
-  saveNotifications(userId, updated);
-}
-
-/**
- * Retry sending WhatsApp for a notification
- */
-export async function retryWhatsAppNotification(userId, notificationId) {
-  const notifications = loadNotifications(userId);
-  const notification = notifications.find(n => n.id === notificationId);
-
-  if (!notification) return { success: false, error: 'Notification not found' };
-
-  // Get user data to retrieve WhatsApp number
-  const users = JSON.parse(localStorage.getItem('quran-tracker-users') || '[]');
-  const user = users.find(u => u.id === userId);
-
-  if (!user || !user.whatsapp_number) {
-    return { success: false, error: 'WhatsApp number not found' };
-  }
-
-  // Try to send again
-  updateNotificationWhatsAppStatus(userId, notificationId, 'sending');
-
-  const result = await sendWhatsAppNotification(user.whatsapp_number, notification.message);
-
-  if (result.success) {
-    updateNotificationWhatsAppStatus(userId, notificationId, 'delivered');
-  } else {
-    updateNotificationWhatsAppStatus(userId, notificationId, 'failed', result.error);
-  }
-
-  return result;
-}
-
-/**
- * Mark a notification as read
- */
-export function markNotificationAsRead(userId, notificationId) {
-  const notifications = loadNotifications(userId);
-  const updated = notifications.map(n =>
-    n.id === notificationId ? { ...n, read: true } : n
-  );
-  saveNotifications(userId, updated);
-}
-
-/**
- * Mark all notifications as read
- */
-export function markAllNotificationsAsRead(userId) {
-  const notifications = loadNotifications(userId);
-  const updated = notifications.map(n => ({ ...n, read: true }));
-  saveNotifications(userId, updated);
-}
-
-/**
- * Delete a notification
- */
-export function deleteNotification(userId, notificationId) {
-  const notifications = loadNotifications(userId);
-  const filtered = notifications.filter(n => n.id !== notificationId);
-  saveNotifications(userId, filtered);
-}
-
-/**
- * Get unread notification count
- */
-export function getUnreadCount(userId) {
-  const notifications = loadNotifications(userId);
-  return notifications.filter(n => !n.read).length;
-}
-
-/**
- * Send WhatsApp notification
- *
- * IMPORTANT: This requires WhatsApp Business API or Twilio setup
- *
- * Setup Instructions:
- *
- * Option 1: Twilio WhatsApp (Recommended for production)
- * 1. Sign up at https://www.twilio.com/
- * 2. Enable WhatsApp in Twilio Console
- * 3. Get your Account SID and Auth Token
- * 4. Add to .env file:
- *    VITE_TWILIO_ACCOUNT_SID=your_account_sid
- *    VITE_TWILIO_AUTH_TOKEN=your_auth_token
- *    VITE_TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
- *
- * Option 2: WhatsApp Business API
- * 1. Apply for WhatsApp Business API access
- * 2. Get API credentials
- * 3. Configure webhook and credentials
- *
- * For development/testing, this function logs the message to console.
+ * Send WhatsApp notification via Edge Function
  */
 export async function sendWhatsAppNotification(phoneNumber, message) {
   console.log('📱 WhatsApp Notification:', {
@@ -165,39 +11,27 @@ export async function sendWhatsAppNotification(phoneNumber, message) {
     timestamp: new Date().toISOString(),
   });
 
-  // Check if Twilio credentials are configured
-  const twilioAccountSid = import.meta.env.VITE_TWILIO_ACCOUNT_SID;
-  const twilioAuthToken = import.meta.env.VITE_TWILIO_AUTH_TOKEN;
-  const twilioWhatsAppNumber = import.meta.env.VITE_TWILIO_WHATSAPP_NUMBER;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { success: false, error: 'Not authenticated' };
 
-  if (!twilioAccountSid || !twilioAuthToken || !twilioWhatsAppNumber) {
-    console.warn('⚠️ WhatsApp not configured. Add Twilio credentials to .env file.');
-    return { success: false, error: 'WhatsApp not configured' };
-  }
-
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   try {
-    // Twilio WhatsApp API call
-    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`, {
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
       method: 'POST',
       headers: {
-        'Authorization': 'Basic ' + btoa(`${twilioAccountSid}:${twilioAuthToken}`),
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
-        From: twilioWhatsAppNumber,
-        To: `whatsapp:${phoneNumber}`,
-        Body: message,
-      }),
+      body: JSON.stringify({ to: `whatsapp:${phoneNumber}`, message }),
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ WhatsApp message sent:', data.sid);
-      return { success: true, messageId: data.sid };
+    const data = await response.json();
+    if (response.ok && data.data?.sid) {
+      console.log('✅ WhatsApp message sent:', data.data.sid);
+      return { success: true, messageId: data.data.sid };
     } else {
-      const error = await response.json();
-      console.error('❌ WhatsApp send failed:', error);
-      return { success: false, error: error.message };
+      console.warn('⚠️ WhatsApp not sent:', data.error || 'Unknown error');
+      return { success: false, error: data.error || 'WhatsApp not configured' };
     }
   } catch (error) {
     console.error('❌ WhatsApp API error:', error);
@@ -209,16 +43,17 @@ export async function sendWhatsAppNotification(phoneNumber, message) {
  * Notify student about new review assignment
  */
 export async function notifyReviewAssigned(student, review, includeWhatsApp = true) {
+  const studentName = student.fullName || student.full_name || '';
   const title = `مراجعة رقم ${review.review_number}`;
   const message = `تم تعيين مراجعة جديدة لك في ${new Date(review.review_date).toLocaleDateString('ar-SA')}. تتضمن ${review.surahs.length} سورة.`;
 
-  // Create in-app notification
-  const notification = createNotification(
+  // Create in-app notification via Supabase
+  const { data: notification } = await createNotification(
     student.id,
     'review_assigned',
     title,
     message,
-    review.id
+    review.id,
   );
 
   // Send WhatsApp if enabled and number is available
@@ -226,7 +61,7 @@ export async function notifyReviewAssigned(student, review, includeWhatsApp = tr
     const whatsappMessage = `
 🕌 ${title}
 
-${student.fullName}، السلام عليكم ورحمة الله
+${studentName}، السلام عليكم ورحمة الله
 
 تم تعيين مراجعة قرآنية جديدة لك:
 
@@ -247,21 +82,10 @@ ${review.notes ? `\n📝 ملاحظات المعلم:\n${review.notes}` : ''}
 
     const result = await sendWhatsAppNotification(student.whatsapp_number, whatsappMessage);
 
-    if (result.success) {
-      // Update notification to mark WhatsApp as delivered
-      updateNotificationWhatsAppStatus(student.id, notification.id, 'delivered');
-    } else {
-      // Mark as failed with error message
-      updateNotificationWhatsAppStatus(student.id, notification.id, 'failed', result.error);
-    }
-
     return { notification, whatsappResult: result };
-  } else if (includeWhatsApp && !student.whatsapp_number) {
-    // WhatsApp requested but no number available
-    updateNotificationWhatsAppStatus(student.id, notification.id, 'no_number');
   }
 
-  return notification;
+  return { notification, whatsappResult: null };
 }
 
 /**
@@ -273,13 +97,14 @@ export async function sendReviewReminder(student, review) {
   const title = `تذكير: مراجعة رقم ${review.review_number}`;
   const message = `مراجعتك القرآنية خلال ${daysUntil} يوم. لا تنسَ المراجعة!`;
 
-  createNotification(student.id, 'review_reminder', title, message, review.id);
+  await createNotification(student.id, 'review_reminder', title, message, review.id);
 
   if (student.whatsapp_number) {
+    const studentName = student.fullName || student.full_name || '';
     const whatsappMessage = `
 🔔 تذكير: مراجعة قرآنية
 
-${student.fullName}، السلام عليكم
+${studentName}، السلام عليكم
 
 لديك مراجعة قرآنية قادمة خلال ${daysUntil} ${daysUntil === 1 ? 'يوم' : 'أيام'}
 

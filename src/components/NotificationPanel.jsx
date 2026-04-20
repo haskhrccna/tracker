@@ -3,12 +3,12 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { getStyles } from '../utils/styles';
 import {
-  loadNotifications,
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
-  deleteNotification,
-  formatNotificationTime,
-} from '../utils/notificationService';
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  removeNotification,
+} from '../utils/db';
+import { formatNotificationTime } from '../utils/notificationService';
 
 export default function NotificationPanel({ userId, onClose, onReviewClick }) {
   const { dark } = useTheme();
@@ -23,23 +23,23 @@ export default function NotificationPanel({ userId, onClose, onReviewClick }) {
     loadNotificationsData();
   }, [userId]);
 
-  const loadNotificationsData = () => {
-    const data = loadNotifications(userId);
-    setNotifications(data.reverse()); // newest first
+  const loadNotificationsData = async () => {
+    const data = await fetchNotifications(userId);
+    setNotifications(data.reverse());
   };
 
-  const handleMarkAsRead = (notificationId) => {
-    markNotificationAsRead(userId, notificationId);
+  const handleMarkAsRead = async (notificationId) => {
+    await markNotificationRead(userId, notificationId);
     loadNotificationsData();
   };
 
-  const handleMarkAllAsRead = () => {
-    markAllNotificationsAsRead(userId);
+  const handleMarkAllAsRead = async () => {
+    await markAllNotificationsRead(userId);
     loadNotificationsData();
   };
 
-  const handleDelete = (notificationId) => {
-    deleteNotification(userId, notificationId);
+  const handleDelete = async (notificationId) => {
+    await removeNotification(userId, notificationId);
     loadNotificationsData();
   };
 

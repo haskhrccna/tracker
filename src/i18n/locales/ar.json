@@ -22,9 +22,17 @@
     "fillAllFields": "يرجى ملء جميع الحقول",
     "invalidCredentials": "اسم المستخدم أو كلمة المرور غير صحيحة",
     "enterFullNameError": "يرجى إدخال الاسم الكامل",
-    "passwordMinLength": "كلمة المرور يجب أن تكون 4 أحرف على الأقل",
-    "emailRequired": "البريد الإلكتروني مطلوب لتسجيل الاشتراك الخلفي",
-    "usernameTaken": "اسم المستخدم مستخدم بالفعل"
+    "passwordMinLength": "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
+    "emailRequired": "البريد الإلكتروني مطلوب",
+    "usernameTaken": "اسم المستخدم مستخدم بالفعل",
+    "forgotPassword": "نسيت كلمة المرور؟",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "resetPasswordSent": "تم إرسال رابط إعادة التعيين. تحقق من بريدك الإلكتروني.",
+    "enterEmailForReset": "أدخل بريدك الإلكتروني لتلقي رابط إعادة التعيين",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+    "passwordResetSuccess": "تم إعادة تعيين كلمة المرور بنجاح!",
+    "passwordsDoNotMatch": "كلمتا المرور غير متطابقتين"
   },
   "teacher": {
     "dashboard": "لوحة المعلم",

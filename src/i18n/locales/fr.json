@@ -22,9 +22,17 @@
     "fillAllFields": "Veuillez remplir tous les champs",
     "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect",
     "enterFullNameError": "Veuillez entrer votre nom complet",
-    "passwordMinLength": "Le mot de passe doit comporter au moins 4 caractères",
-    "emailRequired": "L'email est requis pour l'inscription backend",
-    "usernameTaken": "Ce nom d'utilisateur est déjà pris"
+    "passwordMinLength": "Le mot de passe doit comporter au moins 8 caractères",
+    "emailRequired": "L'email est requis",
+    "usernameTaken": "Ce nom d'utilisateur est déjà pris",
+    "forgotPassword": "Mot de passe oublié ?",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "resetPasswordSent": "Email de réinitialisation envoyé. Vérifiez votre boîte de réception.",
+    "enterEmailForReset": "Entrez votre email pour recevoir un lien de réinitialisation",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirmer le nouveau mot de passe",
+    "passwordResetSuccess": "Mot de passe réinitialisé avec succès !",
+    "passwordsDoNotMatch": "Les mots de passe ne correspondent pas"
   },
   "teacher": {
     "dashboard": "Tableau de Bord Enseignant",

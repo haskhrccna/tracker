@@ -11,7 +11,7 @@ import {
   markNotificationAsRead,
 } from '../utils/db';
 
-export default function AdminDashboard({ user, logout, backendEnabled }) {
+export default function AdminDashboard({ user, logout }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';

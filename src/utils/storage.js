@@ -1,21 +1,4 @@
-import { STORAGE_KEY } from './constants';
-
-export function loadUsers() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch { return []; }
-}
-
-export function saveUsers(users) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  } catch (e) { console.error("Storage error:", e); }
-}
-
-export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-
-// Activity heatmap data from localStorage
+// Activity heatmap data from localStorage (non-sensitive)
 export function loadActivity(userId) {
   try {
     const data = localStorage.getItem(`quran-tracker-activity-${userId}`);
@@ -26,7 +9,7 @@ export function loadActivity(userId) {
 export function saveActivity(userId, activityMap) {
   try {
     localStorage.setItem(`quran-tracker-activity-${userId}`, JSON.stringify(activityMap));
-  } catch (e) { console.error("Activity storage error:", e); }
+  } catch (e) { console.error('Activity storage error:', e); }
 }
 
 export function recordDailyActivity(userId) {

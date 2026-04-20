@@ -1,36 +1,78 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { getStyles } from '../utils/styles';
+import { supabase } from '../lib/supabase';
 
-export default function AuthPage({ login, register, backendEnabled }) {
+export default function AuthPage({ login, register }) {
   const { dark } = useTheme();
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const s = getStyles(dark, isRTL);
 
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState('login'); // login | register | forgot | reset
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Detect password reset callback in URL hash
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      setMode('reset');
+    }
+  }, []);
+
   const handleSubmit = async () => {
     setError('');
+    if (mode === 'forgot') {
+      if (!email.trim()) { setError(t('auth.enterEmailForReset')); return; }
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/`,
+      });
+      if (resetError) {
+        setError(resetError.message);
+      } else {
+        alert(t('auth.resetPasswordSent'));
+        setMode('login');
+      }
+      return;
+    }
+
+    if (mode === 'reset') {
+      if (password.length < 8) { setError(t('auth.passwordMinLength')); return; }
+      if (password !== confirmPassword) { setError(t('auth.passwordsDoNotMatch')); return; }
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        alert(t('auth.passwordResetSuccess'));
+        setMode('login');
+        setPassword('');
+        setConfirmPassword('');
+        window.location.hash = '';
+      }
+      return;
+    }
+
     if (!username.trim() || !password.trim()) { setError(t('auth.fillAllFields')); return; }
     if (mode === 'login') {
       const success = await login(username, password);
       if (!success) setError(t('auth.invalidCredentials'));
     } else {
       if (!fullName.trim()) { setError(t('auth.enterFullNameError')); return; }
-      if (password.length < 4) { setError(t('auth.passwordMinLength')); return; }
-      if (backendEnabled && !email.trim()) { setError(t('auth.emailRequired')); return; }
-      const success = await register({ username, email: email.trim() || null, password, role: 'student', fullName, language: i18n.language });
+      if (password.length < 8) { setError(t('auth.passwordMinLength')); return; }
+      if (!email.trim()) { setError(t('auth.emailRequired')); return; }
+      const success = await register({ username, email: email.trim(), password, role: 'student', fullName, language: i18n.language });
       if (!success) setError(t('auth.usernameTaken'));
     }
   };
+
+  const showTabs = mode === 'login' || mode === 'register';
 
   return (
     <div style={s.authBg}>
@@ -65,44 +107,82 @@ export default function AuthPage({ login, register, backendEnabled }) {
           <p style={s.authSubtitle}>{t('app.subtitle')}</p>
         </div>
 
-        <div style={s.tabRow}>
-          <button onClick={() => { setMode("login"); setError(""); }} style={{ ...s.tab, ...(mode === "login" ? s.tabActive : {}) }}>
-            {t('auth.login')}
-          </button>
-          <button onClick={() => { setMode("register"); setError(""); }} style={{ ...s.tab, ...(mode === "register" ? s.tabActive : {}) }}>
-            {t('auth.register')}
-          </button>
-        </div>
+        {showTabs && (
+          <div style={s.tabRow}>
+            <button onClick={() => { setMode('login'); setError(''); }} style={{ ...s.tab, ...(mode === 'login' ? s.tabActive : {}) }}>
+              {t('auth.login')}
+            </button>
+            <button onClick={() => { setMode('register'); setError(''); }} style={{ ...s.tab, ...(mode === 'register' ? s.tabActive : {}) }}>
+              {t('auth.register')}
+            </button>
+          </div>
+        )}
+
+        {mode === 'forgot' && (
+          <h2 style={{ ...s.authTitle, fontSize: 20, marginBottom: 16 }}>{t('auth.resetPassword')}</h2>
+        )}
+        {mode === 'reset' && (
+          <h2 style={{ ...s.authTitle, fontSize: 20, marginBottom: 16 }}>{t('auth.newPassword')}</h2>
+        )}
 
         <div style={s.authForm}>
-          {mode === "register" && (
+          {mode === 'register' && (
             <div style={s.fieldGroup}>
               <label style={s.label}>{t('auth.fullName')}</label>
               <input style={s.input} placeholder={t('auth.enterFullName')} value={fullName} onChange={e => setFullName(e.target.value)} />
             </div>
           )}
-          <div style={s.fieldGroup}>
-            <label style={s.label}>{t('auth.username')}</label>
-            <input style={s.input} placeholder={t('auth.enterUsername')} value={username} onChange={e => setUsername(e.target.value)} />
-          </div>
-          {mode === 'register' && (
+
+          {(mode === 'login' || mode === 'register') && (
+            <div style={s.fieldGroup}>
+              <label style={s.label}>{t('auth.username')}</label>
+              <input style={s.input} placeholder={t('auth.enterUsername')} value={username} onChange={e => setUsername(e.target.value)} />
+            </div>
+          )}
+
+          {(mode === 'register' || mode === 'forgot') && (
             <div style={s.fieldGroup}>
               <label style={s.label}>{t('auth.email')}</label>
               <input style={s.input} placeholder={t('auth.enterEmail')} value={email} onChange={e => setEmail(e.target.value)} type="email" />
             </div>
           )}
-          <div style={s.fieldGroup}>
-            <label style={s.label}>{t('auth.password')}</label>
-            <div style={{ position: 'relative' }}>
-              <input style={s.input} type={showPassword ? 'text' : 'password'} placeholder={t('auth.enterPassword')} value={password} onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
-              <button onClick={() => setShowPassword(!showPassword)} style={s.eyeBtn}>{showPassword ? '🙈' : '👁️'}</button>
+
+          {(mode === 'login' || mode === 'register' || mode === 'reset') && (
+            <div style={s.fieldGroup}>
+              <label style={s.label}>{t('auth.password')}</label>
+              <div style={{ position: 'relative' }}>
+                <input style={s.input} type={showPassword ? 'text' : 'password'} placeholder={t('auth.enterPassword')} value={password} onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+                <button onClick={() => setShowPassword(!showPassword)} style={s.eyeBtn}>{showPassword ? '🙈' : '👁️'}</button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {mode === 'reset' && (
+            <div style={s.fieldGroup}>
+              <label style={s.label}>{t('auth.confirmNewPassword')}</label>
+              <div style={{ position: 'relative' }}>
+                <input style={s.input} type={showPassword ? 'text' : 'password'} placeholder={t('auth.confirmNewPassword')} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+              </div>
+            </div>
+          )}
+
           {error && <div style={s.error}>{error}</div>}
           <button onClick={handleSubmit} style={s.primaryBtn}>
-            {mode === "login" ? t('auth.submit') : t('auth.createAccount')}
+            {mode === 'login' ? t('auth.submit') : mode === 'register' ? t('auth.createAccount') : mode === 'forgot' ? t('auth.resetPassword') : t('auth.newPassword')}
           </button>
+
+          {mode === 'login' && (
+            <button onClick={() => { setMode('forgot'); setError(''); }} style={{ ...s.secondaryBtn, marginTop: 8, width: '100%', background: 'transparent', border: 'none', color: dark ? '#94a3b8' : '#64748b', cursor: 'pointer', fontSize: 13 }}>
+              {t('auth.forgotPassword')}
+            </button>
+          )}
+          {(mode === 'forgot' || mode === 'reset') && (
+            <button onClick={() => { setMode('login'); setError(''); setPassword(''); setConfirmPassword(''); window.location.hash = ''; }} style={{ ...s.secondaryBtn, marginTop: 8, width: '100%', background: 'transparent', border: 'none', color: dark ? '#94a3b8' : '#64748b', cursor: 'pointer', fontSize: 13 }}>
+              {t('auth.login')}
+            </button>
+          )}
         </div>
       </div>
     </div>
