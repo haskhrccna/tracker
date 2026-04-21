@@ -24,7 +24,11 @@ BEGIN
     'pending',
     COALESCE(NEW.raw_user_meta_data->>'language', 'ar'),
     NEW.email
-  );
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    username = EXCLUDED.username,
+    full_name = EXCLUDED.full_name,
+    email = EXCLUDED.email;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -35,27 +39,33 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ─── Seed initial admin user ───────────────────────────────
--- IMPORTANT: Change email and password before running!
-INSERT INTO auth.users (
-  instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-  confirmation_token, email_change, email_change_token_new, recovery_token,
-  raw_user_meta_data, raw_app_meta_data, created_at, updated_at
-) VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  gen_random_uuid(),
-  'authenticated',
-  'authenticated',
-  'admin@qurantracker.app',
-  crypt('changeme123', gen_salt('bf')),
-  now(),
-  '', '', '', '',
-  '{"username": "admin", "full_name": "Admin", "role": "admin"}',
-  '{"provider": "email", "providers": ["email"]}',
-  now(), now()
-);
+-- Skip if admin user already exists (e.g. re-running this migration)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'haskhr@hotmail.com') THEN
+    INSERT INTO auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token,
+      raw_user_meta_data, raw_app_meta_data, created_at, updated_at
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      gen_random_uuid(),
+      'authenticated',
+      'authenticated',
+      'haskhr@hotmail.com',
+      crypt('SHRg-892011', gen_salt('bf')),
+      now(),
+      '', '', '', '',
+      '{"username": "haskhr", "full_name": "Hassan", "role": "admin"}',
+      '{"provider": "email", "providers": ["email"]}',
+      now(), now()
+    );
+  END IF;
+END
+$$;
 
--- The trigger above will auto-create the profile, but we ensure role is admin:
+-- Ensure the profile exists with admin role (trigger may have created it already)
 INSERT INTO public.profiles (id, username, full_name, role, status, preferred_language, email)
-SELECT id, 'admin', 'Admin', 'admin', 'active', 'ar', email
-FROM auth.users WHERE email = 'admin@qurantracker.app'
+SELECT id, 'haskhr', 'Hassan', 'admin', 'active', 'ar', email
+FROM auth.users WHERE email = 'haskhr@hotmail.com'
 ON CONFLICT (id) DO UPDATE SET role = 'admin', status = 'active';

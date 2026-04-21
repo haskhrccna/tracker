@@ -1,0 +1,23 @@
+{
+  "_description": "ADD these keys to src/i18n/locales/ar.json (merge, don't replace)",
+  "forceReset": {
+    "title": "إنشاء كلمة مرور جديدة",
+    "subtitle": "قام المدير بإعادة تعيين كلمة مرورك. يرجى اختيار كلمة مرور جديدة للمتابعة.",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "pwMismatch": "كلمتا المرور غير متطابقتين",
+    "pwTooShort": "يجب ألا تقل عن 6 أحرف",
+    "continue": "متابعة",
+    "cancel": "إلغاء — تسجيل الخروج"
+  },
+  "admin": {
+    "_merge": "Add these keys under the existing 'admin' namespace",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "resetPasswordConfirm": "هل أنت متأكد من إعادة تعيين كلمة المرور لهذا المستخدم؟ سيُطلب منه إنشاء كلمة مرور جديدة عند تسجيل الدخول التالي.",
+    "resetPasswordSuccess": "تم إرسال طلب إعادة التعيين. كلمة المرور المؤقتة: ",
+    "deleteUser": "حذف",
+    "deleteUserConfirm": "هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء.",
+    "deleteSuccess": "تم الحذف",
+    "actions": "إجراءات"
+  }
+}

@@ -18,6 +18,7 @@ import AuthPage from './pages/AuthPage';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import ForcePasswordResetPage from './pages/ForcePasswordResetPage';
 
 function AppInner() {
   const { dark } = useTheme();
@@ -101,19 +102,59 @@ function AppInner() {
   }, [i18n.language]);
 
   const login = async (username, password) => {
-    const { error } = await signIn(username, password);
+  if (backendEnabled()) {
+    const { data, error } = await signIn(username, password);
     if (error) return false;
-    // onAuthStateChange will handle setting currentUser and page
-    // But we need to wait for profile load and check status
     const profile = await getCurrentUser();
     if (!profile) return false;
+
+    // --- NEW: forced password reset check ---
+    if (profile.must_reset_password) {
+      setCurrentUser(profile);
+      setPage('force-reset');
+      return true;
+    }
+    // -----------------------------------------
+
     if (profile.status !== 'active') {
       alert('Your account is pending approval. Please wait for admin approval.');
-      await supabase.auth.signOut();
       return false;
     }
+    const records = await fetchStudentRecords(profile.id);
+    const reviews = await fetchStudentReviews(profile.id);
+    setCurrentUser({ ...profile, records, reviews });
+    setPage('dashboard');
+    if (profile.role === 'teacher') {
+      const teacherStudents = await fetchTeacherStudents(profile.id);
+      setStudents(teacherStudents);
+    }
     return true;
-  };
+  }
+
+  // Local-mode fallback
+  const usersList = loadUsers();
+  const user = usersList.find(u => u.username === username && u.password === password);
+  if (!user) return false;
+
+  // --- NEW: local-mode reset check ---
+  if (user.must_reset_password) {
+    setCurrentUser(user);
+    setPage('force-reset');
+    return true;
+  }
+  // -----------------------------------
+
+  if (user.status === 'active') {
+    setCurrentUser(user);
+    setPage('dashboard');
+    return true;
+  }
+  if (user.status !== 'active') {
+    alert('Your account is pending approval.');
+    return false;
+  }
+  return false;
+};
 
   const register = async ({ username, password, email, role, fullName, language }) => {
     const { data, error } = await signUp({ username, password, email, role, fullName, language });
@@ -150,7 +191,26 @@ function AppInner() {
       </div>
     );
   }
-
+const handleResetComplete = async () => {
+  // Re-fetch profile to get updated must_reset_password=false
+  if (backendEnabled()) {
+    const profile = await getCurrentUser();
+    if (profile) {
+      const records = await fetchStudentRecords(profile.id);
+      const reviews = await fetchStudentReviews(profile.id);
+      setCurrentUser({ ...profile, records, reviews });
+      setPage('dashboard');
+    }
+  } else {
+    // Local mode — flag already cleared in ForcePasswordResetPage
+    const usersList = loadUsers();
+    const updated = usersList.find(u => u.id === currentUser?.id);
+    if (updated) {
+      setCurrentUser(updated);
+      setPage('dashboard');
+    }
+  }
+};
   return (
     <div style={s.app}>
       <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
@@ -176,6 +236,13 @@ function AppInner() {
           updateUser={updateUser}
           logout={logout}
         />
+      )}
+      {page === 'force-reset' && currentUser && (
+        <ForcePasswordResetPage
+          user={currentUser}
+          onComplete={handleResetComplete}
+          onCancel={logout}
+       />
       )}
       {page === 'dashboard' && currentUser?.role === 'admin' && (
         <AdminDashboard
